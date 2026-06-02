@@ -97,6 +97,63 @@ fn king_moves(from: u32, allies: u64) -> u64 {
     (m0|m1|m2|m3|m4|m5|m6|m7) & !allies
 }
 
+fn rook_moves(from: u32, occ: u64, allies: u64) -> u64 {
+    let rank = from >> 3;
+    let file = from & 7;
+
+    let mut bb = 0;
+
+    // up
+
+    for r in rank+1..8 {
+        let sq = r*8+file;
+
+        bb |= 1u64 << sq;
+
+        if (occ & (1u64 << sq)) != 0 {
+            break;
+        }
+    }
+
+    // down
+
+    for r in (0..rank).rev() {
+        let sq = r*8+file;
+
+        bb |= 1u64 << sq;
+
+        if (occ & (1u64 << sq)) != 0 {
+            break;
+        }
+    }
+
+    // left
+
+    for f in (0..file).rev() {
+        let sq = rank*8+f;
+
+        bb |= 1u64 << sq;
+
+        if (occ & (1u64 << sq)) != 0 {
+            break;
+        }
+    }
+
+    // right
+
+    for f in file+1..8 {
+        let sq = rank*8+f;
+
+        bb |= 1u64 << sq;
+
+        if (occ & (1u64 << sq)) != 0 {
+            break;
+        }
+    }
+
+    bb & !allies
+}
+
 pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     let mut moves = MoveList {
         data: [Move(0);_],
@@ -207,6 +264,26 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 
         kings &= kings - 1;
     }
+
+
+
+    // rook moves
+
+    let mut rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
+
+    while rooks != 0 {
+        let from = rooks.trailing_zeros();
+        let mut to_bb = rook_moves(from, occ, allies);
+
+        while to_bb != 0 {
+            let to = to_bb.trailing_zeros();
+            moves.push(Move::new(from as usize, to as usize));
+            to_bb &= to_bb - 1;
+        }
+
+        rooks &= rooks - 1;
+    }
+
 
 
     moves

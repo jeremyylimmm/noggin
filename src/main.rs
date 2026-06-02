@@ -2,7 +2,7 @@ use chengine::Position;
 
 fn main() {
     //let pos = Position::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
-    let pos = Position::from_fen("8/8/3k4/8/8/K7/8/8 w - - 0 1").unwrap();
+    let pos = Position::from_fen("8/8/2K2R2/8/1k2r3/8/8/8 w - - 0 1").unwrap();
     pos.dump();
 
     let moves = chengine::movegen::gen_pseudolegal_moves(&pos);
