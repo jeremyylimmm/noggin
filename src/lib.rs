@@ -723,6 +723,35 @@ impl Position {
 
         count
     }
+
+    pub fn splitperft(&mut self, depth: isize) {
+        let moves = movegen::gen_pseudolegal_moves(self);
+
+        let side = self.to_move;
+
+        let mut total = 0;
+
+        for i in 0..moves.len() {
+            let mv = moves[i];
+
+            self.make_move(mv);
+
+            if !self.checked(side) {
+                if depth <= 2 {
+                    let n = self.perft(depth-1);
+                    total += n;
+                    println!("{} {}", mv.uci_string(), n);
+                }
+                else {
+                    self.splitperft(depth-1);
+                }
+            }
+
+            self.unmake_move();
+        }
+
+        println!("Total {}", total);
+    }
 }
 
 fn sq_to_san(sq: usize) -> Option<String> {
