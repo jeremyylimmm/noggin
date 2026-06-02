@@ -1,6 +1,8 @@
+pub mod movegen;
+
 #[repr(u8)]
 #[derive(Copy, Clone)]
-enum Piece {
+pub enum Piece {
     None,
     Pawn,
     Knight,
@@ -11,13 +13,36 @@ enum Piece {
 }
 
 #[derive(Copy, Clone)]
-enum Side {
+pub enum Side {
     White,
     Black
 }
 
+#[derive(Copy, Clone)]
+pub struct Move(u16);
+
+impl Move {
+    pub fn new(from: usize, to: usize) -> Self {
+        Self(
+            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16
+        )
+    }
+
+    fn from(&self) -> usize {
+        (self.0 & 0b111111) as usize
+    }
+
+    fn to(&self) -> usize {
+        ((self.0 >> 6) & 0b111111) as usize
+    }
+
+    pub fn uci_name(&self) -> String {
+        format!("{}{}", sq_to_san(self.from()).unwrap(), sq_to_san(self.to()).unwrap())
+    }
+}
+
 impl Piece {
-    fn bb_index(&self, side: Side) -> Option<usize> {
+    pub fn bb_index(&self, side: Side) -> Option<usize> {
         if matches!(self, Piece::None) {
             None
         }
@@ -36,13 +61,13 @@ const BQ_CASTLE: u8 = 1 << 2;
 const BK_CASTLE: u8 = 1 << 3;
 
 pub struct Position {
-    bb: [u64; 12],
-    board: [Piece; 64],
-    ep_sq: Option<usize>,
-    castling: u8,
-    to_move: Side,
-    halfmove_clock: usize,
-    fullmoves: usize
+    pub bb: [u64; 12],
+    pub board: [Piece; 64],
+    pub ep_sq: Option<usize>,
+    pub castling: u8,
+    pub to_move: Side,
+    pub halfmove_clock: usize,
+    pub fullmoves: usize
 }
 
 fn letter_to_file(l: char) -> Option<usize> {
@@ -176,7 +201,7 @@ impl Position {
                 return Err("unexpected end of FEN: expected castling availability".to_string());
             }
 
-            Some('-') => {},
+            Some('-') => {cur.next().unwrap();},
 
             Some(_) => {
                 while let Some(&c) = cur.peek() {
@@ -209,7 +234,7 @@ impl Position {
         
         match cur.peek() {
             None => return Err("unexpected end of FEN: expected en passant square".to_string()),
-            Some('-') => {},
+            Some('-') => {cur.next().unwrap();},
             Some(_) => {
                 let fl = cur.next().unwrap();
                 let file = letter_to_file(fl).ok_or(format!("invalid en passant square file '{}'", fl))?;
@@ -228,10 +253,8 @@ impl Position {
         }
 
 
-
-
         if !matches!(cur.next(), Some(' ')) {
-            return Err("unexpected end of FEN: expected halfmove clock".to_string());
+            return Err("unexpected end of FEN: expected space before halfmove clock".to_string());
         }
 
         if !matches!(cur.peek(), Some('0'..='9')) {
@@ -323,8 +346,6 @@ impl Position {
 
         println!("Halfmove clock: {}", self.halfmove_clock);
         println!("Fullmoves: {}", self.fullmoves);
-
-        println!("");
     }
 }
 
