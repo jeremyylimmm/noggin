@@ -75,12 +75,12 @@ impl Move {
     pub fn uci_string(&self) -> String {
         let promotion_str = match self.promotion() {
             Piece::None => "",
-            Piece::Pawn => "=P",
-            Piece::Knight => "=N",
-            Piece::Bishop => "=B",
-            Piece::Rook => "=R",
-            Piece::Queen => "=Q",
-            Piece::King => "=K",
+            Piece::Pawn => "p",
+            Piece::Knight => "n",
+            Piece::Bishop => "b",
+            Piece::Rook => "r",
+            Piece::Queen => "q",
+            Piece::King => "k",
         };
 
         format!("{}{}{}", sq_to_san(self.from()).unwrap(), sq_to_san(self.to()).unwrap(), promotion_str)
@@ -479,8 +479,6 @@ impl Position {
         let from_rank = (from >> 3) & 7;
         let from_file = from & 7;
 
-        let to_file = to & 7;
-
         let to_rank = (to >> 3) & 7;
 
         let start = self.board[from];
@@ -489,6 +487,12 @@ impl Position {
             x => x
         };
 
+
+
+        let (home_rank, promotion_rank) = match self.to_move {
+            Side::White => (0, 7),
+            Side::Black => (7, 0)
+        };
 
 
 
@@ -574,11 +578,11 @@ impl Position {
                 self.castling &= !(kcastle_flag | qcastle_flag);
             }
 
-            (Piece::Rook, 0, _, true)  => {
+            (Piece::Rook, 0, _, true) if from_rank == home_rank => {
                 self.castling &= !qcastle_flag;
             }
 
-            (Piece::Rook, 7, true, _)  => {
+            (Piece::Rook, 7, true, _) if from_rank == home_rank  => {
                 self.castling &= !kcastle_flag;
             }
 
@@ -587,18 +591,19 @@ impl Position {
 
         // handle if we capture the other player's rook
 
-        match (capture_piece, to_file, opp_can_kcastle, opp_can_qcastle) {
-            (Piece::Rook, 0, _, true) => {
+        let capture_rank = (capture_sq >> 3) & 7;
+
+        match (capture_piece, capture_sq & 7, opp_can_kcastle, opp_can_qcastle) {
+            (Piece::Rook, 0, _, true) if capture_rank == promotion_rank => {
                 self.castling &= !opp_qcastle_flag;
             }
 
-            (Piece::Rook, 7, true, _) => {
+            (Piece::Rook, 7, true, _) if capture_rank == promotion_rank => {
                 self.castling &= !opp_kcastle_flag;
             }
 
             _ => {}
         }
-
 
 
         // update halfmove clock
@@ -737,14 +742,9 @@ impl Position {
             self.make_move(mv);
 
             if !self.checked(side) {
-                if depth <= 2 {
-                    let n = self.perft(depth-1);
-                    total += n;
-                    println!("{} {}", mv.uci_string(), n);
-                }
-                else {
-                    self.splitperft(depth-1);
-                }
+                let n = self.perft(depth-1);
+                total += n;
+                println!("{} {}", mv.uci_string(), n);
             }
 
             self.unmake_move();
@@ -752,6 +752,7 @@ impl Position {
 
         println!("Total {}", total);
     }
+
 }
 
 fn sq_to_san(sq: usize) -> Option<String> {
@@ -927,4 +928,29 @@ mod tests {
         let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
         assert_eq!(pos.perft(6), 8031647685);
     }
+}
+
+pub fn parse_uci_move(uci: &str) -> Option<Move> {
+    let mut cur = uci.chars();
+
+    let f0 = cur.next()?;
+    let r0 = cur.next()?;
+    let f1 = cur.next()?;
+    let r1 = cur.next()?;
+
+    let p = cur.next();
+
+    let from = ((r0.to_digit(10)?-1)*8) as usize + letter_to_file(f0)?;
+    let to = ((r1.to_digit(10)?-1)*8) as usize + letter_to_file(f1)?;
+
+    let promotion = match p {
+        None => Piece::None,
+        Some('n') => Piece::Knight,
+        Some('b') => Piece::Bishop,
+        Some('r') => Piece::Rook,
+        Some('q') => Piece::Queen,
+        _ => return None
+    };
+
+    Some(Move::new(from,  to, promotion))
 }
