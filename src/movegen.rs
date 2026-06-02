@@ -97,61 +97,63 @@ fn king_moves(from: u32, allies: u64) -> u64 {
     (m0|m1|m2|m3|m4|m5|m6|m7) & !allies
 }
 
+fn slide_and_gather<F: Fn(u64)->u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
+    let mut result = 0;
+
+    loop {
+        cur = slide(cur);
+
+        result |= cur;
+
+        if cur & occ != 0 || cur == 0 {
+            break;
+        }
+    }
+
+    result
+}
+
 fn rook_moves(from: u32, occ: u64, allies: u64) -> u64 {
-    let rank = from >> 3;
-    let file = from & 7;
+    let rook = 1u64 << from;
 
-    let mut bb = 0;
+    let up = slide_and_gather(rook, occ, |x|x<<8);
+    let right = slide_and_gather(rook, occ, |x|x<<1 & !FILE_A);
+    let down = slide_and_gather(rook, occ, |x|x>>8);
+    let left = slide_and_gather(rook, occ, |x|x>>1 & !FILE_H);
 
-    // up
+    (up | right | down | left) & !allies
+}
 
-    for r in rank+1..8 {
-        let sq = r*8+file;
+fn bishop_moves(from: u32, occ: u64, allies: u64) -> u64 {
+    let bishop = 1u64 << from;
 
-        bb |= 1u64 << sq;
+    let left_up = slide_and_gather(bishop, occ, |x|x<<7 & !FILE_H);
+    let right_up = slide_and_gather(bishop, occ, |x|x<<9 & !FILE_A);
+    let right_down = slide_and_gather(bishop, occ, |x|x>>7 & !FILE_A);
+    let left_down = slide_and_gather(bishop, occ, |x|x>>9 & !FILE_H);
 
-        if (occ & (1u64 << sq)) != 0 {
-            break;
+    (left_up | right_up | right_down | left_down) & !allies
+}
+
+fn queen_moves(from: u32, occ: u64, allies: u64) -> u64 {
+    rook_moves(from, occ, allies) | bishop_moves(from, occ, allies)
+}
+
+fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, f: F, moves: &mut MoveList) {
+    while pieces != 0 {
+        let from = pieces.trailing_zeros();
+        let mut to_bb = f(from);
+
+        while to_bb != 0 {
+            let to = to_bb.trailing_zeros();
+
+            moves.push(Move::new(from as usize, to as usize));
+
+            to_bb &= to_bb - 1;
         }
+
+        pieces &= pieces - 1;
     }
-
-    // down
-
-    for r in (0..rank).rev() {
-        let sq = r*8+file;
-
-        bb |= 1u64 << sq;
-
-        if (occ & (1u64 << sq)) != 0 {
-            break;
-        }
-    }
-
-    // left
-
-    for f in (0..file).rev() {
-        let sq = rank*8+f;
-
-        bb |= 1u64 << sq;
-
-        if (occ & (1u64 << sq)) != 0 {
-            break;
-        }
-    }
-
-    // right
-
-    for f in file+1..8 {
-        let sq = rank*8+f;
-
-        bb |= 1u64 << sq;
-
-        if (occ & (1u64 << sq)) != 0 {
-            break;
-        }
-    }
-
-    bb & !allies
 }
 
 pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
@@ -228,63 +230,30 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
         pawn_captures_right &= pawn_captures_right - 1;
     }
 
-
     // knight moves
 
-    let mut knights = pos.bb[Piece::Knight.bb_index(pos.to_move).unwrap()];
-
-    while knights != 0 {
-        let from = knights.trailing_zeros();
-        let mut to_bb = knight_moves(from, allies);
-
-        while to_bb != 0 {
-            let to = to_bb.trailing_zeros();
-            moves.push(Move::new(from as usize, to as usize));
-            to_bb &= to_bb - 1;
-        }
-
-        knights &= knights - 1;
-    }
-
-
+    let knights = pos.bb[Piece::Knight.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(knights, |from|knight_moves(from, allies), &mut moves);
 
     // king moves
 
-    let mut kings = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()];
-
-    while kings != 0 {
-        let from = kings.trailing_zeros();
-        let mut to_bb = king_moves(from, allies);
-
-        while to_bb != 0 {
-            let to = to_bb.trailing_zeros();
-            moves.push(Move::new(from as usize, to as usize));
-            to_bb &= to_bb - 1;
-        }
-
-        kings &= kings - 1;
-    }
-
-
+    let kings = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(kings, |from|king_moves(from, allies), &mut moves);
 
     // rook moves
 
-    let mut rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
+    let rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(rooks, |from|rook_moves(from, occ, allies), &mut moves);
 
-    while rooks != 0 {
-        let from = rooks.trailing_zeros();
-        let mut to_bb = rook_moves(from, occ, allies);
+    // bishop moves
 
-        while to_bb != 0 {
-            let to = to_bb.trailing_zeros();
-            moves.push(Move::new(from as usize, to as usize));
-            to_bb &= to_bb - 1;
-        }
+    let bishops = pos.bb[Piece::Bishop.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(bishops, |from|bishop_moves(from, occ, allies), &mut moves);
 
-        rooks &= rooks - 1;
-    }
-
-
+    // queen moves
+    
+    let queens = pos.bb[Piece::Queen.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(queens, |from|queen_moves(from, occ, allies), &mut moves);
 
     moves
 }
