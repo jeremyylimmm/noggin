@@ -22,9 +22,9 @@ pub enum Side {
 pub struct Move(u16);
 
 impl Move {
-    pub fn new(from: usize, to: usize) -> Self {
+    pub fn new(from: usize, to: usize, promotion: Piece) -> Self {
         Self(
-            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16
+            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16 | ((promotion as u16 & 0b111) << 12)
         )
     }
 
@@ -36,8 +36,33 @@ impl Move {
         ((self.0 >> 6) & 0b111111) as usize
     }
 
-    pub fn uci_name(&self) -> String {
-        format!("{}{}", sq_to_san(self.from()).unwrap(), sq_to_san(self.to()).unwrap())
+    fn promotion(&self) -> Piece {
+        let x = (self.0 >> 12) & 0b111;
+
+        match x {
+            0 => Piece::None,
+            1 => Piece::Pawn,
+            2 => Piece::Knight,
+            3 => Piece::Bishop,
+            4 => Piece::Rook,
+            5 => Piece::Queen,
+            6 => Piece::King,
+            _ => panic!("invalid promotion piece in move encoding")
+        }
+    }
+
+    pub fn uci_string(&self) -> String {
+        let promotion_str = match self.promotion() {
+            Piece::None => "",
+            Piece::Pawn => "=P",
+            Piece::Knight => "=N",
+            Piece::Bishop => "=B",
+            Piece::Rook => "=R",
+            Piece::Queen => "=Q",
+            Piece::King => "=K",
+        };
+
+        format!("{}{}{}", sq_to_san(self.from()).unwrap(), sq_to_san(self.to()).unwrap(), promotion_str)
     }
 }
 

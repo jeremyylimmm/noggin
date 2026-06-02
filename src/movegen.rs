@@ -147,12 +147,26 @@ fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, f: F, moves: &mut Mov
         while to_bb != 0 {
             let to = to_bb.trailing_zeros();
 
-            moves.push(Move::new(from as usize, to as usize));
+            moves.push(Move::new(from as usize, to as usize, Piece::None));
 
             to_bb &= to_bb - 1;
         }
 
         pieces &= pieces - 1;
+    }
+}
+
+fn add_pawn_move(from: i32, to: i32, promotion_rank: i32, moves: &mut MoveList) {
+    let to_rank = (to >> 3) & 7;
+
+    if to_rank == promotion_rank {
+        moves.push(Move::new(from as usize, to as usize, Piece::Knight));
+        moves.push(Move::new(from as usize, to as usize, Piece::Bishop));
+        moves.push(Move::new(from as usize, to as usize, Piece::Rook));
+        moves.push(Move::new(from as usize, to as usize, Piece::Queen));
+    }
+    else {
+        moves.push(Move::new(from as usize, to as usize, Piece::None));
     }
 }
 
@@ -171,8 +185,10 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     let enemies = pos.bb[if matches!(pos.to_move, Side::Black) {0..6} else {6..12}].iter().fold(0, |acc, x|acc|x);
     let ep_mask = if let Some(ep) = pos.ep_sq {1u64 << ep} else {0};
 
-
-
+    let promotion_rank = match pos.to_move {
+        Side::White => 7,
+        Side::Black => 0
+    };
 
 
     // pawn pushes
@@ -187,18 +203,14 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     while pawn_pushes != 0 {
         let to = pawn_pushes.trailing_zeros() as i32;
         let from = to - pawn_push_offset * 8 as i32; 
-
-        moves.push(Move::new(from as usize, to as usize));        
-
+        add_pawn_move(from, to, promotion_rank, &mut moves);
         pawn_pushes &= pawn_pushes-1;
     }
 
     while double_pawn_pushes != 0 {
         let to = double_pawn_pushes.trailing_zeros() as i32;
         let from = to - pawn_push_offset * 16 as i32;
-
-        moves.push(Move::new(from as usize, to as usize));
-
+        add_pawn_move(from, to, promotion_rank, &mut moves);
         double_pawn_pushes &= double_pawn_pushes - 1;
     }
 
@@ -215,18 +227,14 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     while pawn_captures_left != 0 {
         let to = pawn_captures_left.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_left;
-
-        moves.push(Move::new(from as usize, to as usize));
-
+        add_pawn_move(from, to, promotion_rank, &mut moves);
         pawn_captures_left &= pawn_captures_left - 1;
     }
 
     while pawn_captures_right != 0 {
         let to = pawn_captures_right.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_right;
-
-        moves.push(Move::new(from as usize, to as usize));
-
+        add_pawn_move(from, to, promotion_rank, &mut moves);
         pawn_captures_right &= pawn_captures_right - 1;
     }
 
