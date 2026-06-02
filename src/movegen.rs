@@ -1,4 +1,4 @@
-use crate::{Position, Move, Piece, Side};
+use crate::*;
 
 pub struct MoveList {
     data: [Move;256],
@@ -39,17 +39,12 @@ fn black_pawn_pushes(pawns: u64, occ: u64) -> u64 {
 }
 
 fn white_pawn_double_pushes(pawns: u64, occ: u64) -> u64 {
-    ((pawns & (0xff << 8)) << 16) & !occ
+    (white_pawn_pushes(pawns & (0xff << 8), occ) << 8) & !occ
 }
 
 fn black_pawn_double_pushes(pawns: u64, occ: u64) -> u64 {
-    ((pawns & (0xff << 48)) >> 16) & !occ
+    (black_pawn_pushes(pawns & (0xff << 48), occ) >> 8) & !occ
 }
-
-const FILE_A: u64 = 0x0101010101010101;
-const FILE_B: u64 = 0x0202020202020202;
-const FILE_G: u64 = 0x4040404040404040;
-const FILE_H: u64 = 0x8080808080808080;
 
 fn white_pawn_captures_left(pawns: u64, mask: u64) -> u64 {
     (pawns << 7) & !(FILE_H) & mask
@@ -68,71 +63,19 @@ fn black_pawn_captures_right(pawns: u64, mask: u64) -> u64 {
 }
 
 fn knight_moves(from: u32, allies: u64) -> u64 {
-    let knight = 1u64 << from;
-
-    let m0 = knight <<  6 & !(FILE_G | FILE_H);
-    let m1 = knight << 15 & !(FILE_H);
-    let m2 = knight << 17 & !(FILE_A);
-    let m3 = knight << 10 & !(FILE_A | FILE_B);
-    let m4 = knight >>  6 & !(FILE_A | FILE_B);
-    let m5 = knight >> 15 & !(FILE_A);
-    let m6 = knight >> 17 & !(FILE_H);
-    let m7 = knight >> 10 & !(FILE_G | FILE_H);
-
-    (m0|m1|m2|m3|m4|m5|m6|m7) & !allies
+    knight_attacks(from) & !allies
 }
 
 fn king_moves(from: u32, allies: u64) -> u64 {
-    let king = 1u64 << from;
-
-    let m0 = (king << 7) & !FILE_H;
-    let m1 =  king << 8;
-    let m2 = (king << 9) & !FILE_A;
-    let m3 = (king << 1) & !FILE_A;
-    let m4 = (king >> 7) & !FILE_A;
-    let m5 =  king >> 8;
-    let m6 = (king >> 9) & !FILE_H;
-    let m7 = (king >> 1) & !FILE_H;
-
-    (m0|m1|m2|m3|m4|m5|m6|m7) & !allies
-}
-
-fn slide_and_gather<F: Fn(u64)->u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
-    let mut result = 0;
-
-    loop {
-        cur = slide(cur);
-
-        result |= cur;
-
-        if cur & occ != 0 || cur == 0 {
-            break;
-        }
-    }
-
-    result
+    king_attacks(from) & !allies
 }
 
 fn rook_moves(from: u32, occ: u64, allies: u64) -> u64 {
-    let rook = 1u64 << from;
-
-    let up = slide_and_gather(rook, occ, |x|x<<8);
-    let right = slide_and_gather(rook, occ, |x|x<<1 & !FILE_A);
-    let down = slide_and_gather(rook, occ, |x|x>>8);
-    let left = slide_and_gather(rook, occ, |x|x>>1 & !FILE_H);
-
-    (up | right | down | left) & !allies
+    rook_attacks(from, occ) & !allies
 }
 
 fn bishop_moves(from: u32, occ: u64, allies: u64) -> u64 {
-    let bishop = 1u64 << from;
-
-    let left_up = slide_and_gather(bishop, occ, |x|x<<7 & !FILE_H);
-    let right_up = slide_and_gather(bishop, occ, |x|x<<9 & !FILE_A);
-    let right_down = slide_and_gather(bishop, occ, |x|x>>7 & !FILE_A);
-    let left_down = slide_and_gather(bishop, occ, |x|x>>9 & !FILE_H);
-
-    (left_up | right_up | right_down | left_down) & !allies
+    bishop_attacks(from, occ) & !allies
 }
 
 fn queen_moves(from: u32, occ: u64, allies: u64) -> u64 {
@@ -185,9 +128,9 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     let enemies = pos.bb[if matches!(pos.to_move, Side::Black) {0..6} else {6..12}].iter().fold(0, |acc, x|acc|x);
     let ep_mask = if let Some(ep) = pos.ep_sq {1u64 << ep} else {0};
 
-    let promotion_rank = match pos.to_move {
-        Side::White => 7,
-        Side::Black => 0
+    let (home_rank, promotion_rank) = match pos.to_move {
+        Side::White => (0, 7),
+        Side::Black => (7, 0)
     };
 
 
@@ -262,6 +205,58 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     
     let queens = pos.bb[Piece::Queen.bb_index(pos.to_move).unwrap()];
     gen_non_batched_moves(queens, |from|queen_moves(from, occ, allies), &mut moves);
+
+
+
+
+
+    // castling
+
+    let (kcastle_flag, qcastle_flag) = match pos.to_move {
+        Side::White => (WK_CASTLE, WQ_CASTLE),
+        Side::Black => (BK_CASTLE, BQ_CASTLE),
+    };
+
+    let king_sq = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()].trailing_zeros();
+
+    let king_rank = (king_sq >> 3) & 7;
+    let king_file = king_sq & 7;
+
+    let home_rank_mask = 0xff << (home_rank*8);
+    let kcastle_path = (FILE_F | FILE_G) & home_rank_mask;
+    let qcastle_path = (FILE_C | FILE_D) & home_rank_mask;
+
+    let bb_attacked = |mut bb: u64| {
+        while bb != 0 {
+            let sq = bb.trailing_zeros();
+            if pos.sq_attacked(sq as usize, pos.to_move.opp()) {
+                return true;
+            }
+            bb &= bb-1;
+        }
+        return false;
+    };
+
+    if (pos.castling & kcastle_flag) != 0 {
+        assert!(king_rank == home_rank);
+        assert!(king_file == 4);
+
+        if (occ & kcastle_path) == 0 && !bb_attacked(kcastle_path) && !pos.checked(pos.to_move) {
+            let to = home_rank*8+6;
+            moves.push(Move::new(king_sq as usize, to as usize, Piece::None));
+        }
+    }
+
+    if (pos.castling & qcastle_flag) != 0 {
+        assert!(king_rank == home_rank);
+        assert!(king_file == 4);
+
+        if (occ & (qcastle_path | (FILE_B & home_rank_mask))) == 0 && !bb_attacked(qcastle_path) && !pos.checked(pos.to_move) {
+            let to = home_rank*8+2;
+            moves.push(Move::new(king_sq as usize, to as usize, Piece::None));
+        }
+    }
+
 
     moves
 }
