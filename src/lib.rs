@@ -54,7 +54,7 @@ pub enum Side {
     Black
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct Move(u16);
 
 pub const NULL_MOVE: Move = Move(0);

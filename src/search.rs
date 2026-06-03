@@ -1,11 +1,46 @@
 use crate::*;
 
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+#[derive(Clone)]
 pub struct Searcher {
+    stop: Arc<AtomicBool>,
+    exited: bool
 }
 
 
 impl Searcher {
-    pub fn search(&self, pos: &mut Position, depth: i32, ply: i32) -> (i32, Move) {
+    pub fn new() -> Self {
+        Self {
+            stop: Arc::new(AtomicBool::new(false)),
+            exited: false
+        }
+    }
+
+    pub fn exit_on_node(&mut self) -> bool {
+        let exit = self.stop.load(Ordering::Relaxed);
+
+        if exit {
+            self.exited = true;
+        }
+
+        exit
+    }
+
+    pub fn reset(&mut self) {
+        self.stop.store(false, Ordering::Relaxed);
+        self.exited = false;
+    }
+
+    pub fn stop(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+
+    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32) -> (i32, Move) {
+        if self.exit_on_node() {
+            return (0, NULL_MOVE);
+        }
+
         let side = pos.to_move;
         let in_check = pos.checked(side);
 
@@ -35,6 +70,11 @@ impl Searcher {
 
             let score = -self.search(pos, depth-1, ply+1).0;
 
+            if self.exited {
+                pos.unmake_move();
+                return (0, NULL_MOVE);
+            }
+
             if score > best_score {
                 best_score = score;
                 best_move = mv;
@@ -56,7 +96,18 @@ impl Searcher {
         (best_score, best_move)
     }
 
-    pub fn best(&self, pos: &mut Position, depth: i32) -> Move {
-        self.search(pos, depth, 0).1
+    pub fn best(&mut self, pos: &mut Position, depth: i32) -> Move {
+        let mut best_move = NULL_MOVE;
+
+        for d in 1..=depth {
+            let mv = self.search(pos, depth, 0).1;
+
+            if self.exited {
+                break;
+            }
+
+            best_move = mv;
+        }
+        best_move
     }
 }
