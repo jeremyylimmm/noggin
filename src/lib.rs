@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod perfttests;
+
 pub mod movegen;
 
 pub const FILE_A: u64 = 0x0101010101010101;
@@ -869,65 +872,6 @@ fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
         6 => (rank*8+7, rank*8+5),
         _ => panic!("invalid king move")
     })
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_make_and_unmake_move() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        let baseline = pos.clone();
-
-        let moves = movegen::gen_pseudolegal_moves(&pos);
-
-        for i in 0..moves.len() {
-            let mv = moves[i];
-
-            pos.make_move(mv);
-            pos.unmake_move();
-
-            assert_eq!(pos, baseline);
-        }
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_1() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(1), 48);
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_2() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(2), 2039);
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_3() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(3), 97862);
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_4() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(4), 4085603);
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_5() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(5), 193690690);
-    }
-
-    #[test]
-    fn test_kiwipete_perft_depth_6() {
-        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        assert_eq!(pos.perft(6), 8031647685);
-    }
 }
 
 pub fn parse_uci_move(uci: &str) -> Option<Move> {
