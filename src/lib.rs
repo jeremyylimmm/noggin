@@ -786,7 +786,33 @@ fn black_pawn_attacks(pawns: u64) -> u64 {
     left | right
 }
 
-pub fn knight_attacks(from: u32) -> u64 {
+const KNIGHT_ATTACK_TABLE: [u64;64] = {
+    let mut out = [0;_];
+
+    let mut from = 0;
+
+    while from < 64 {
+        out[from] = gen_knight_attacks(from);
+        from += 1;
+    }
+
+    out
+};
+
+const KING_ATTACK_TABLE: [u64;64] = {
+    let mut out = [0;_];
+
+    let mut from = 0;
+
+    while from < 64 {
+        out[from] = gen_king_attacks(from);
+        from += 1;
+    }
+
+    out
+};
+
+const fn gen_knight_attacks(from: usize) -> u64 {
     let knight = 1u64 << from;
 
     let m0 = knight <<  6 & !(FILE_G | FILE_H);
@@ -801,7 +827,11 @@ pub fn knight_attacks(from: u32) -> u64 {
     m0|m1|m2|m3|m4|m5|m6|m7
 }
 
-pub fn king_attacks(from: u32) -> u64 {
+pub fn knight_attacks(from: u32) -> u64 {
+    KNIGHT_ATTACK_TABLE[from as usize]
+}
+
+const fn gen_king_attacks(from: usize) -> u64 {
     let king = 1u64 << from;
 
     let m0 = (king << 7) & !FILE_H;
@@ -814,6 +844,10 @@ pub fn king_attacks(from: u32) -> u64 {
     let m7 = (king >> 1) & !FILE_H;
 
     m0|m1|m2|m3|m4|m5|m6|m7
+}
+
+fn king_attacks(from: u32) -> u64 {
+    KING_ATTACK_TABLE[from as usize]
 }
 
 fn slide_and_gather<F: Fn(u64)->u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
