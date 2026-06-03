@@ -142,7 +142,7 @@ fn main() {
             let mut s_copy= s.clone();
 
             handle = Some(std::thread::spawn(move ||{
-                let mv = s_copy.best(&mut pos_copy, 6);
+                let mv = s_copy.best(&mut pos_copy, 5);
                 println!("bestmove {}", mv.uci_string());
             }));
         }
