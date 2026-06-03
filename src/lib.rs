@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod perfttests;
 
+mod generated;
+
 pub mod movegen;
 
 pub const FILE_A: u64 = 0x0101010101010101;
@@ -850,42 +852,26 @@ fn king_attacks(from: u32) -> u64 {
     KING_ATTACK_TABLE[from as usize]
 }
 
-fn slide_and_gather<F: Fn(u64)->u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
-    let mut result = 0;
-
-    loop {
-        cur = slide(cur);
-
-        result |= cur;
-
-        if cur & occ != 0 || cur == 0 {
-            break;
-        }
-    }
-
-    result
+fn magic_index(occ: u64, mask: u64, magic: u64, shift: u32) -> usize {
+    (((mask & occ) * magic) >> shift) as usize
 }
 
 pub fn rook_attacks(from: u32, occ: u64) -> u64 {
-    let rook = 1u64 << from;
+    let mask = generated::magic::ROOK_ATTACK_TABLE_MASK[from as usize];
+    let shift = generated::magic::ROOK_ATTACK_TABLE_SHIFT[from as usize];
+    let magic = generated::magic::ROOK_ATTACK_TABLE_MAGIC[from as usize];
 
-    let up = slide_and_gather(rook, occ, |x|x<<8);
-    let right = slide_and_gather(rook, occ, |x|x<<1 & !FILE_A);
-    let down = slide_and_gather(rook, occ, |x|x>>8);
-    let left = slide_and_gather(rook, occ, |x|x>>1 & !FILE_H);
-
-    up | right | down | left
+    let idx = magic_index(occ, mask, magic, shift);
+    generated::magic::ROOK_ATTACK_TABLE[from as usize][idx]
 }
 
 pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
-    let bishop = 1u64 << from;
+    let mask = generated::magic::BISHOP_ATTACK_TABLE_MASK[from as usize];
+    let shift = generated::magic::BISHOP_ATTACK_TABLE_SHIFT[from as usize];
+    let magic = generated::magic::BISHOP_ATTACK_TABLE_MAGIC[from as usize];
 
-    let left_up = slide_and_gather(bishop, occ, |x|x<<7 & !FILE_H);
-    let right_up = slide_and_gather(bishop, occ, |x|x<<9 & !FILE_A);
-    let right_down = slide_and_gather(bishop, occ, |x|x>>7 & !FILE_A);
-    let left_down = slide_and_gather(bishop, occ, |x|x>>9 & !FILE_H);
-
-    left_up | right_up | right_down | left_down
+    let idx = magic_index(occ, mask, magic, shift);
+    generated::magic::BISHOP_ATTACK_TABLE[from as usize][idx]
 }
 
 
