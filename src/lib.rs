@@ -898,3 +898,27 @@ pub fn parse_uci_move(uci: &str) -> Option<Move> {
 
     Some(Move::new(from,  to, promotion))
 }
+
+pub fn benchmark_perft() {
+    let fen = KIWIPETE_FEN;
+    let mut pos = Position::from_fen(fen).unwrap();
+
+    let depth = 5;
+
+    let start = std::time::Instant::now();
+    let n = pos.perft(depth);
+
+    let duration = start.elapsed();
+
+    let seconds = duration.as_secs_f64();
+    let nps = (n as f64) / seconds;
+
+    println!("Perft results");
+    println!("=============");
+    println!("Position: {}{}", fen, if fen == KIWIPETE_FEN {" (kiwipete)"} else if fen == STARTING_FEN {" (startpos)"} else {""});
+    println!("Depth: {}", depth);
+    println!("Leaves: {}", n);
+    println!("Elapsed: {:?}", duration);
+    println!("NPS: {:.2}M", nps/1_000_000.0);
+    println!("");
+}
