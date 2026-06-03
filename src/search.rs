@@ -100,7 +100,7 @@ impl Searcher {
         let mut best_move = NULL_MOVE;
 
         for d in 1..=depth {
-            let mv = self.search(pos, depth, 0).1;
+            let mv = self.search(pos, d, 0).1;
 
             if self.exited {
                 break;
