@@ -187,6 +187,7 @@ fn main() {
     gen_table(&mut file, "BISHOP", get_bishop_mask, bishop_attacks);
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/generated/magic.rs");
 }
 
 struct PCG32 {

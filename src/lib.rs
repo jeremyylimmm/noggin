@@ -2,6 +2,7 @@
 mod perfttests;
 
 mod generated;
+pub mod search;
 
 pub mod movegen;
 
@@ -16,6 +17,8 @@ pub const FILE_H: u64 = 0x8080808080808080;
 
 pub const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 pub const KIWIPETE_FEN: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+
+pub const MATE_SCORE: i32 = 30_000;
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -36,6 +39,13 @@ impl Side {
             Side::Black => Side::White,
         }
     }
+
+    fn sign(&self) -> i32 {
+        match self {
+            Side::White => 1,
+            Side::Black => -1
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -46,6 +56,8 @@ pub enum Side {
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Move(u16);
+
+pub const NULL_MOVE: Move = Move(0);
 
 impl Move {
     pub fn new(from: usize, to: usize, promotion: Piece) -> Self {
@@ -102,6 +114,18 @@ impl Piece {
                 Side::White => *self as usize - 1,
                 Side::Black => *self as usize - 1 + 6
             })
+        }
+    }
+
+    pub fn centipawn_value(&self) -> i32 {
+        match self {
+            Piece::None => 0,
+            Piece::Pawn => 100,
+            Piece::Knight => 300,
+            Piece::Bishop => 300,
+            Piece::Rook => 5000,
+            Piece::Queen => 900,
+            Piece::King => 0,
         }
     }
 }
@@ -465,6 +489,23 @@ impl Position {
 
         println!("Halfmove clock: {}", self.halfmove_clock);
         println!("Fullmoves: {}", self.fullmoves);
+    }
+
+    fn eval(&self) -> i32 {
+        let mut sum = 0;
+
+        for side in [Side::White, Side::Black] {
+            for piece in [Piece::Pawn,Piece::Knight,Piece::Bishop,Piece::Rook,Piece::Queen] {
+                let bb = self.bb[piece.bb_index(side).unwrap()];
+                sum += side.sign() * bb.count_ones() as i32 * piece.centipawn_value();
+            }
+        }
+
+        sum
+    }
+
+    fn relative_eval(&self) -> i32 {
+        self.to_move.sign() * self.eval()
     }
 
     pub fn make_move(&mut self, mv: Move) {
