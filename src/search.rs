@@ -1,11 +1,20 @@
 use crate::*;
 
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, time};
 
 #[derive(Clone)]
 pub struct Searcher {
     stop: Arc<AtomicBool>,
-    exited: bool
+    exited: bool,
+
+    time_limit_hard: f32,
+    time_limit_soft: f32,
+
+    node_limit_hard: usize,
+    node_limit_soft: usize,
+
+    nodes: usize,
+    start_time: std::time::Instant
 }
 
 
@@ -13,23 +22,46 @@ impl Searcher {
     pub fn new() -> Self {
         Self {
             stop: Arc::new(AtomicBool::new(false)),
-            exited: false
+            exited: false,
+            time_limit_hard: f32::INFINITY,
+            time_limit_soft: f32::INFINITY,
+            node_limit_hard: 1024*1024*1024,
+            node_limit_soft: 1024*1024*1024,
+            nodes: 0,
+            start_time: std::time::Instant::now()
         }
     }
 
     pub fn exit_on_node(&mut self) -> bool {
-        let exit = self.stop.load(Ordering::Relaxed);
-
-        if exit {
+        if self.nodes >= self.node_limit_hard {
             self.exited = true;
         }
 
-        exit
+        if (self.nodes & 4095) == 0 {
+            if self.stop.load(Ordering::Relaxed) {
+                self.exited = true;
+            }
+
+            let elapsed = (std::time::Instant::now() - self.start_time).as_secs_f32();
+
+            if elapsed >= self.time_limit_hard * 0.95 {
+                self.exited = true;
+            }
+        }
+
+        self.nodes += 1;
+
+        self.exited
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, time_limit_hard: f32, time_limit_soft: f32, node_limit_hard: usize, node_limit_soft: usize) {
         self.stop.store(false, Ordering::Relaxed);
         self.exited = false;
+
+        self.time_limit_hard = time_limit_hard;
+        self.time_limit_soft = time_limit_soft;
+        self.node_limit_hard = node_limit_hard;
+        self.node_limit_soft = node_limit_soft;
     }
 
     pub fn stop(&self) {
@@ -97,9 +129,18 @@ impl Searcher {
     }
 
     pub fn best(&mut self, pos: &mut Position, depth: i32) -> Move {
+        self.nodes = 0;
+        self.start_time = std::time::Instant::now();
+
         let mut best_move = NULL_MOVE;
 
         for d in 1..=depth {
+            let elapsed = (time::Instant::now() - self.start_time).as_secs_f32();
+
+            if self.nodes >= self.node_limit_soft || elapsed >= self.time_limit_soft * 0.95 {
+                break;
+            }
+
             let mv = self.search(pos, d, 0).1;
 
             if self.exited {
