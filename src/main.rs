@@ -129,6 +129,15 @@ fn allocate_time(params: &GoParameters, to_move: Side) -> (f32, f32) {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    if let Some(option) = args.get(1) {
+        if option == "bench" {
+            bench_main();
+            return;
+        }
+    }
+
     let mut pos = Position::from_fen(STARTING_FEN).unwrap();
     let mut s = search::Searcher::new();
     let mut handle: Option<std::thread::JoinHandle<()>> = None;
@@ -270,4 +279,16 @@ fn main() {
             println!("unrecognized command '{}'", input);
         }
     }
+}
+
+fn bench_main() {
+    let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
+    let mut s = search::Searcher::new();
+
+    s.reset(f32::INFINITY, f32::INFINITY, 1024*1024*1024, 1024*1024*1024);
+    s.best(&mut pos, 5);
+
+    let nps = s.nodes() as f32 / s.elapsed(); 
+
+    println!("nodes {} nps {}", s.nodes(), nps.round() as usize);
 }

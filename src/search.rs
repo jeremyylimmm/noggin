@@ -32,6 +32,14 @@ impl Searcher {
         }
     }
 
+    pub fn nodes(&self) -> usize {
+        self.nodes
+    }
+
+    pub fn elapsed(&self) -> f32 {
+        (std::time::Instant::now() - self.start_time).as_secs_f32()
+    }
+
     pub fn exit_on_node(&mut self) -> bool {
         if self.nodes >= self.node_limit_hard {
             self.exited = true;
@@ -42,9 +50,7 @@ impl Searcher {
                 self.exited = true;
             }
 
-            let elapsed = (std::time::Instant::now() - self.start_time).as_secs_f32();
-
-            if elapsed >= self.time_limit_hard * 0.95 {
+            if self.elapsed() >= self.time_limit_hard * 0.95 {
                 self.exited = true;
             }
         }
@@ -62,6 +68,9 @@ impl Searcher {
         self.time_limit_soft = time_limit_soft;
         self.node_limit_hard = node_limit_hard;
         self.node_limit_soft = node_limit_soft;
+
+        self.nodes = 0;
+        self.start_time = std::time::Instant::now();
     }
 
     pub fn stop(&self) {
@@ -129,15 +138,10 @@ impl Searcher {
     }
 
     pub fn best(&mut self, pos: &mut Position, depth: i32) -> Move {
-        self.nodes = 0;
-        self.start_time = std::time::Instant::now();
-
         let mut best_move = NULL_MOVE;
 
         for d in 1..=depth {
-            let elapsed = (time::Instant::now() - self.start_time).as_secs_f32();
-
-            if self.nodes >= self.node_limit_soft || elapsed >= self.time_limit_soft * 0.95 {
+            if self.nodes >= self.node_limit_soft || self.elapsed() >= self.time_limit_soft * 0.95 {
                 break;
             }
 
