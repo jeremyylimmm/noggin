@@ -123,7 +123,7 @@ fn allocate_time(params: &GoParameters, to_move: Side) -> (f32, f32) {
     };
 
     let soft = (time / 40.0 + inc * 0.8).max(0.05);
-    let hard = (soft * 4.0).clamp(soft, time * 0.25);
+    let hard = (soft * 4.0).min(time * 0.25);
 
     return (soft, hard);
 }
@@ -163,7 +163,7 @@ fn main() {
             stop!();
             println!("id name Noggin");
             println!("id author Noggin Authors");
-            println!("option name Hash type spin default 1 min 1 max 1");
+            println!("option name Hash type spin default 1 min 1 max 16");
             println!("option name Threads type spin default 1 min 1 max 1");
             println!("uciok");
         }
@@ -290,5 +290,5 @@ fn bench_main() {
 
     let nps = s.nodes() as f32 / s.elapsed(); 
 
-    println!("nodes {} nps {}", s.nodes(), nps.round() as usize);
+    println!("{} nodes {} nps", s.nodes(), nps.round() as usize);
 }
