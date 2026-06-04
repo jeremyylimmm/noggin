@@ -14,6 +14,10 @@ impl MoveList {
     pub fn len(&self) -> usize {
         self.count
     }
+
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.data.swap(a, b)
+    }
 }
 
 impl std::ops::Index<usize> for MoveList {
