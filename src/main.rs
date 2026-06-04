@@ -271,6 +271,9 @@ fn main() {
         else if args[0] == "stop" {
             stop!();
         }
+        else if args[0] == "setoption" {
+            stop!();
+        }
         else {
             stop!();
             println!("unrecognized command '{}'", input);
