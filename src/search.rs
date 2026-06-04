@@ -136,6 +136,77 @@ impl Searcher {
         self.stop.store(true, Ordering::Relaxed);
     }
 
+    pub fn qsearch(&mut self, pos: &mut Position, ply: i32, mut alpha: i32, beta: i32) -> i32 {
+        if self.exit_on_node() {
+            return 0;
+        }
+
+        let side = pos.to_move;
+
+        if pos.halfmove_clock == 100 {
+            return 0;
+        }
+
+
+
+
+        let stand_pat = pos.relative_eval();
+
+        if stand_pat > alpha {
+            alpha = stand_pat;
+        }
+
+        if alpha >= beta {
+            return stand_pat;
+        }
+
+
+
+
+
+        let moves = movegen::gen_pseudolegal_captures(pos);
+        let mut move_picker = MovePicker::new(pos, moves);
+
+        let mut best_score = stand_pat;
+
+
+
+
+        while let Some(mv) = move_picker.next() {
+            pos.make_move(mv);
+
+            if pos.checked(side) {
+                pos.unmake_move();
+                continue
+            }
+
+            let score = -self.qsearch(pos, ply+1, -beta, -alpha);
+
+            if self.exited {
+                pos.unmake_move();
+                return 0;
+            }
+
+            if score > best_score {
+                best_score = score;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
+
+            if alpha >= beta {
+                pos.unmake_move();
+                return best_score;
+            }
+
+            pos.unmake_move();
+        }
+
+        best_score
+    }
+
+
     pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
@@ -149,7 +220,7 @@ impl Searcher {
         }
 
         if depth <= 0 {
-            return (pos.relative_eval(), NULL_MOVE);
+            return (self.qsearch(pos, ply, alpha, beta), NULL_MOVE);
         }
 
         let moves = movegen::gen_pseudolegal_moves(pos);

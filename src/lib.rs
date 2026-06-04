@@ -896,7 +896,7 @@ fn king_attacks(from: u32) -> u64 {
 }
 
 fn magic_index(occ: u64, mask: u64, magic: u64, shift: u32) -> usize {
-    (((mask & occ) * magic) >> shift) as usize
+    ((mask & occ).overflowing_mul(magic).0 >> shift) as usize
 }
 
 pub fn rook_attacks(from: u32, occ: u64) -> u64 {

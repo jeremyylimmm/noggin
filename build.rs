@@ -62,7 +62,7 @@ fn find_magic(mask: u64) -> (u64, u32) {
         let mut success = true;
 
         loop {
-            let index = ((perm * magic) >> shift) as usize;
+            let index = (perm.overflowing_mul(magic).0 >> shift) as usize;
 
             if seen.get(index) {
                 success = false;
@@ -135,7 +135,7 @@ fn gen_table<M: Fn(usize)->u64, A: Fn(u32, u64)->u64>(stream: &mut File, name: &
         let mut perm = mask;
 
         loop {
-            let index = ((perm * magic) >> shift) as usize;
+            let index = (perm.overflowing_mul(magic).0 >> shift) as usize;
 
             bbs[index] = get_attacks(sq as u32, perm);
 
