@@ -1,11 +1,12 @@
+use crate::generated::zobrist;
+
 #[cfg(test)]
-mod perfttests;
+mod searchtests;
 
 mod pesto;
-
 mod generated;
-pub mod search;
 
+pub mod search;
 pub mod movegen;
 
 pub const INF_SCORE: i32 = 50_000_000;
@@ -155,6 +156,7 @@ struct Undo {
     to_move: Side,
     halfmove_clock: usize,
     fullmoves: usize,
+    hash: u64,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -166,6 +168,7 @@ pub struct Position {
     pub to_move: Side,
     pub halfmove_clock: usize,
     pub fullmoves: usize,
+    pub hash: u64,
     undos: Vec<Undo>
 }
 
@@ -388,8 +391,7 @@ impl Position {
             fullmoves += x as usize;
         }
 
-
-        Ok(Position{
+        let mut pos = Position{
             bb,
             board,
             ep_sq,
@@ -397,8 +399,13 @@ impl Position {
             to_move,
             halfmove_clock,
             fullmoves,
+            hash: 0,
             undos: vec![]
-        })
+        };
+
+        pos.hash = pos.compute_hash();
+
+        Ok(pos)
     }
 
     pub fn checked(&self, side: Side) -> bool {
@@ -518,7 +525,8 @@ impl Position {
             castling: self.castling,
             to_move: self.to_move,
             halfmove_clock: self.halfmove_clock,
-            fullmoves: self.fullmoves
+            fullmoves: self.fullmoves,
+            hash: self.hash
         };
 
         let from = mv.from();
@@ -548,7 +556,7 @@ impl Position {
 
         self.board[from] = Piece::None;
         self.bb[start.bb_index(self.to_move).unwrap()] ^= 1u64 << from;
-
+        self.hash ^= zobrist::PIECE[start.bb_index(self.to_move).unwrap()][from];
 
 
 
@@ -563,6 +571,7 @@ impl Position {
 
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
             self.board[capture_sq] = Piece::None;
+            self.hash ^= zobrist::PIECE[capture_piece.bb_index(self.to_move.opp()).unwrap()][capture_sq];
         }
 
 
@@ -573,7 +582,7 @@ impl Position {
         debug_assert!(self.board[to] == Piece::None);
         self.board[to] = end;
         self.bb[end.bb_index(self.to_move).unwrap()] ^= 1u64 << to;
-
+        self.hash ^= zobrist::PIECE[end.bb_index(self.to_move).unwrap()][to];
 
 
         // move rook if castling
@@ -585,6 +594,11 @@ impl Position {
 
             self.board[rook_from] = Piece::None;
             self.board[rook_to] = Piece::Rook;
+
+            let piece_id = Piece::Rook.bb_index(self.to_move).unwrap();
+
+            self.hash ^= zobrist::PIECE[piece_id][rook_from];
+            self.hash ^= zobrist::PIECE[piece_id][rook_to];
         }
 
 
@@ -594,20 +608,27 @@ impl Position {
 
         let rank_diff = from_rank.abs_diff(to_rank);
 
+        if let Some(ep) = self.ep_sq.take() {
+            self.hash ^= zobrist::EP_SQUARE[ep];
+        }
+
         if start == Piece::Pawn && rank_diff > 1 { // double push
-            self.ep_sq = Some(match self.to_move {
+            let sq = match self.to_move {
                 Side::White => to - 8,
                 Side::Black => to + 8
-            });
-        }
-        else {
-            self.ep_sq = None;
+            };
+
+            self.hash ^= zobrist::EP_SQUARE[sq];
+
+            self.ep_sq = Some(sq);
         }
 
 
 
 
         // handle castling rights
+
+        self.hash ^= zobrist::CASTLING[self.castling as usize];
 
         let (kcastle_flag, qcastle_flag, opp_kcastle_flag, opp_qcastle_flag) = match self.to_move {
             Side::White => (WK_CASTLE, WQ_CASTLE, BK_CASTLE, BQ_CASTLE),
@@ -653,6 +674,8 @@ impl Position {
             _ => {}
         }
 
+        self.hash ^= zobrist::CASTLING[self.castling as usize];
+
 
         // update halfmove clock
 
@@ -678,6 +701,7 @@ impl Position {
         // finally, update to-move
 
         self.to_move = self.to_move.opp();
+        self.hash ^= zobrist::TO_MOVE_BLACK;
 
 
         // push to the undo stack
@@ -695,6 +719,7 @@ impl Position {
         self.to_move = undo.to_move;
         self.halfmove_clock = undo.halfmove_clock;
         self.fullmoves = undo.fullmoves;
+        self.hash = undo.hash;
 
         let end = self.board[mv.to()];
 
@@ -749,6 +774,29 @@ impl Position {
         else {
             to
         }
+    }
+
+    pub fn compute_hash(&self) -> u64 {
+        let mut hash = zobrist::BASE;
+
+        let black_bb = self.bb[6..].iter().fold(0, |acc, x|acc|x);
+
+        for (sq, &p) in self.board.iter().enumerate().filter(|&(_, &p)|p != Piece::None) {
+            let offset = if (black_bb & (1u64 << sq)) != 0 {6usize} else {0usize};
+            hash ^= zobrist::PIECE[p.id().unwrap() + offset][sq];
+        }
+
+        if let Some(ep_sq) = self.ep_sq {
+            hash ^= zobrist::EP_SQUARE[ep_sq];
+        }
+
+        hash ^= zobrist::CASTLING[self.castling as usize];
+
+        if self.to_move == Side::Black {
+            hash ^= zobrist::TO_MOVE_BLACK;
+        }
+
+        hash
     }
 
     pub fn perft(&mut self, depth: isize) -> usize {
