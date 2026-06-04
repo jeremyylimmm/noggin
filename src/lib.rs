@@ -6,6 +6,8 @@ pub mod search;
 
 pub mod movegen;
 
+pub const INF_SCORE: i32 = 50_000_000;
+
 pub const FILE_A: u64 = 0x0101010101010101;
 pub const FILE_B: u64 = 0x0202020202020202;
 pub const FILE_C: u64 = 0x0404040404040404;

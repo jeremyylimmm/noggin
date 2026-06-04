@@ -77,7 +77,7 @@ impl Searcher {
         self.stop.store(true, Ordering::Relaxed);
     }
 
-    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32) -> (i32, Move) {
+    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
@@ -109,7 +109,7 @@ impl Searcher {
                 continue
             }
 
-            let score = -self.search(pos, depth-1, ply+1).0;
+            let score = -self.search(pos, depth-1, ply+1, -beta, -alpha).0;
 
             if self.exited {
                 pos.unmake_move();
@@ -118,7 +118,16 @@ impl Searcher {
 
             if score > best_score {
                 best_score = score;
+            }
+
+            if score > alpha {
+                alpha = score;
                 best_move = mv;
+            }
+
+            if alpha >= beta {
+                pos.unmake_move();
+                return (best_score, best_move);
             }
 
             pos.unmake_move();
@@ -145,7 +154,7 @@ impl Searcher {
                 break;
             }
 
-            let mv = self.search(pos, d, 0).1;
+            let mv = self.search(pos, d, 0, -INF_SCORE, INF_SCORE).1;
 
             if self.exited {
                 break;
