@@ -38,6 +38,14 @@ pub enum Piece {
 }
 
 impl Side {
+    fn from_id(id: usize) -> Option<Self> {
+        match id {
+            0 => Some(Side::White),
+            1 => Some(Side::Black),
+            _ => None
+        }
+    }
+
     fn opp(&self) -> Self {
         match self {
             Side::White => Side::Black,
@@ -49,6 +57,13 @@ impl Side {
         match self {
             Side::White => 1,
             Side::Black => -1
+        }
+    }
+
+    fn id(&self) -> usize {
+        match self {
+            Side::White => 0,
+            Side::Black => 1
         }
     }
 }
@@ -65,9 +80,9 @@ pub struct Move(u16);
 pub const NULL_MOVE: Move = Move(0);
 
 impl Move {
-    pub fn new(from: usize, to: usize, promotion: Piece) -> Self {
+    pub fn new(from: usize, to: usize, promotion: Piece, side: Side) -> Self {
         Self(
-            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16 | ((promotion as u16 & 0b111) << 12)
+            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16 | ((promotion as u16 & 0b111) << 12) | ((side.id() as u16) << 15)
         )
     }
 
@@ -77,6 +92,10 @@ impl Move {
 
     fn to(&self) -> usize {
         ((self.0 >> 6) & 0b111111) as usize
+    }
+
+    fn side(&self) -> Side {
+        Side::from_id(((self.0 >> 15) & 1) as usize).unwrap()
     }
 
     fn promotion(&self) -> Piece {
@@ -150,6 +169,7 @@ const BK_CASTLE: u8 = 1 << 3;
 #[derive(Clone, PartialEq, Debug)]
 struct Undo {
     mv: Move,
+    repetition_boundary: bool,
     capture_piece: Option<Piece>,
     ep_sq: Option<usize>,
     castling: u8,
@@ -520,6 +540,7 @@ impl Position {
     pub fn make_move(&mut self, mv: Move) {
         let mut undo = Undo{
             mv,
+            repetition_boundary: false,
             capture_piece: None,
             ep_sq: self.ep_sq,
             castling: self.castling,
@@ -544,6 +565,11 @@ impl Position {
         };
 
 
+        if start == Piece::Pawn {
+            undo.repetition_boundary = true;
+        }
+
+
 
         let (home_rank, promotion_rank) = match self.to_move {
             Side::White => (0, 7),
@@ -563,11 +589,12 @@ impl Position {
 
         // remove captured piece
 
-        let capture_sq = self.capture_sq(mv, start, self.to_move);
+        let capture_sq = self.capture_sq(mv, start);
         let capture_piece = self.board[capture_sq];
 
         if capture_piece != Piece::None {
             undo.capture_piece = Some(capture_piece);
+            undo.repetition_boundary = true;
 
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
             self.board[capture_sq] = Piece::None;
@@ -744,7 +771,7 @@ impl Position {
         // add back captured piece
 
         if let Some(capture_piece) = undo.capture_piece {
-            let capture_sq = self.capture_sq(mv, start, self.to_move);
+            let capture_sq = self.capture_sq(mv, start);
             self.board[capture_sq] = capture_piece;
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
         }
@@ -755,7 +782,7 @@ impl Position {
         self.bb[start.bb_index(self.to_move).unwrap()] ^= 1u64 << mv.from();
     }
 
-    fn capture_sq(&self, mv: Move, piece: Piece, side: Side) -> usize {
+    fn capture_sq(&self, mv: Move, piece: Piece) -> usize {
         let from_file = mv.from() & 7;
         let to_file = mv.to() & 7;
 
@@ -766,7 +793,7 @@ impl Position {
         let to_is_ep_sq = matches!(self.ep_sq, Some(x) if x == to);
 
         if is_pawn && different_file && to_is_ep_sq {
-            match side {
+            match mv.side() {
                 Side::White => to - 8,
                 Side::Black => to + 8,
             }
@@ -847,6 +874,36 @@ impl Position {
         }
 
         println!("Total {}", total);
+    }
+
+    pub fn is_capture(&self, mv: Move) -> Option<Piece> {
+        let piece = self.board[mv.from()];
+        let capture_sq = self.capture_sq(mv, piece);
+
+        match self.board[capture_sq] {
+            Piece::None => None,
+            p => Some(p)
+        }
+    }
+
+    pub fn is_threefold_repetition(&self) -> bool {
+        let mut count = 0;
+
+        for undo in self.undos.iter().rev() {
+            if undo.repetition_boundary  {
+                break;
+            }
+
+            if undo.hash == self.hash {
+                count += 1;
+
+                if count == 2 {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
 }
@@ -985,7 +1042,7 @@ fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
     })
 }
 
-pub fn parse_uci_move(uci: &str) -> Option<Move> {
+pub fn parse_uci_move(uci: &str, side: Side) -> Option<Move> {
     let mut cur = uci.chars();
 
     let f0 = cur.next()?;
@@ -1007,7 +1064,7 @@ pub fn parse_uci_move(uci: &str) -> Option<Move> {
         _ => return None
     };
 
-    Some(Move::new(from,  to, promotion))
+    Some(Move::new(from,  to, promotion, side))
 }
 
 pub fn benchmark_perft() {

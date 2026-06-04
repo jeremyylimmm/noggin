@@ -92,7 +92,7 @@ fn queen_moves(from: u32, occ: u64, allies: u64) -> u64 {
     rook_moves(from, occ, allies) | bishop_moves(from, occ, allies)
 }
 
-fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, f: F, moves: &mut MoveList) {
+fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, side: Side, f: F, moves: &mut MoveList) {
     while pieces != 0 {
         let from = pieces.trailing_zeros();
         let mut to_bb = f(from);
@@ -100,7 +100,7 @@ fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, f: F, moves: &mut Mov
         while to_bb != 0 {
             let to = to_bb.trailing_zeros();
 
-            moves.push(Move::new(from as usize, to as usize, Piece::None));
+            moves.push(Move::new(from as usize, to as usize, Piece::None, side));
 
             to_bb &= to_bb - 1;
         }
@@ -109,21 +109,23 @@ fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, f: F, moves: &mut Mov
     }
 }
 
-fn add_pawn_move(from: i32, to: i32, promotion_rank: i32, moves: &mut MoveList) {
+fn add_pawn_move(from: i32, to: i32, side: Side, promotion_rank: i32, moves: &mut MoveList) {
     let to_rank = (to >> 3) & 7;
 
     if to_rank == promotion_rank {
-        moves.push(Move::new(from as usize, to as usize, Piece::Knight));
-        moves.push(Move::new(from as usize, to as usize, Piece::Bishop));
-        moves.push(Move::new(from as usize, to as usize, Piece::Rook));
-        moves.push(Move::new(from as usize, to as usize, Piece::Queen));
+        moves.push(Move::new(from as usize, to as usize, Piece::Knight, side));
+        moves.push(Move::new(from as usize, to as usize, Piece::Bishop, side));
+        moves.push(Move::new(from as usize, to as usize, Piece::Rook, side));
+        moves.push(Move::new(from as usize, to as usize, Piece::Queen, side));
     }
     else {
-        moves.push(Move::new(from as usize, to as usize, Piece::None));
+        moves.push(Move::new(from as usize, to as usize, Piece::None, side));
     }
 }
 
 pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
+    let side = pos.to_move;
+
     let mut moves = MoveList {
         data: [Move(0);_],
         count: 0
@@ -156,14 +158,14 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     while pawn_pushes != 0 {
         let to = pawn_pushes.trailing_zeros() as i32;
         let from = to - pawn_push_offset * 8 as i32; 
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         pawn_pushes &= pawn_pushes-1;
     }
 
     while double_pawn_pushes != 0 {
         let to = double_pawn_pushes.trailing_zeros() as i32;
         let from = to - pawn_push_offset * 16 as i32;
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         double_pawn_pushes &= double_pawn_pushes - 1;
     }
 
@@ -180,41 +182,41 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
     while pawn_captures_left != 0 {
         let to = pawn_captures_left.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_left;
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         pawn_captures_left &= pawn_captures_left - 1;
     }
 
     while pawn_captures_right != 0 {
         let to = pawn_captures_right.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_right;
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         pawn_captures_right &= pawn_captures_right - 1;
     }
 
     // knight moves
 
     let knights = pos.bb[Piece::Knight.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(knights, |from|knight_moves(from, allies), &mut moves);
+    gen_non_batched_moves(knights, side, |from|knight_moves(from, allies), &mut moves);
 
     // king moves
 
     let kings = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(kings, |from|king_moves(from, allies), &mut moves);
+    gen_non_batched_moves(kings, side, |from|king_moves(from, allies), &mut moves);
 
     // rook moves
 
     let rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(rooks, |from|rook_moves(from, occ, allies), &mut moves);
+    gen_non_batched_moves(rooks, side, |from|rook_moves(from, occ, allies), &mut moves);
 
     // bishop moves
 
     let bishops = pos.bb[Piece::Bishop.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(bishops, |from|bishop_moves(from, occ, allies), &mut moves);
+    gen_non_batched_moves(bishops, side, |from|bishop_moves(from, occ, allies), &mut moves);
 
     // queen moves
     
     let queens = pos.bb[Piece::Queen.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(queens, |from|queen_moves(from, occ, allies), &mut moves);
+    gen_non_batched_moves(queens, side, |from|queen_moves(from, occ, allies), &mut moves);
 
 
 
@@ -253,7 +255,7 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 
         if (occ & kcastle_path) == 0 && !bb_attacked(kcastle_path) && !pos.checked(pos.to_move) {
             let to = home_rank*8+6;
-            moves.push(Move::new(king_sq as usize, to as usize, Piece::None));
+            moves.push(Move::new(king_sq as usize, to as usize, Piece::None, side));
         }
     }
 
@@ -263,7 +265,7 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 
         if (occ & (qcastle_path | (FILE_B & home_rank_mask))) == 0 && !bb_attacked(qcastle_path) && !pos.checked(pos.to_move) {
             let to = home_rank*8+2;
-            moves.push(Move::new(king_sq as usize, to as usize, Piece::None));
+            moves.push(Move::new(king_sq as usize, to as usize, Piece::None, side));
         }
     }
 
@@ -272,6 +274,8 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 }
 
 pub fn gen_pseudolegal_captures(pos: &Position) -> MoveList {
+    let side = pos.to_move;
+
     let mut moves = MoveList {
         data: [Move(0);_],
         count: 0
@@ -307,41 +311,41 @@ pub fn gen_pseudolegal_captures(pos: &Position) -> MoveList {
     while pawn_captures_left != 0 {
         let to = pawn_captures_left.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_left;
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         pawn_captures_left &= pawn_captures_left - 1;
     }
 
     while pawn_captures_right != 0 {
         let to = pawn_captures_right.trailing_zeros() as i32;
         let from = to - pawn_capture_offset_right;
-        add_pawn_move(from, to, promotion_rank, &mut moves);
+        add_pawn_move(from, to, side, promotion_rank, &mut moves);
         pawn_captures_right &= pawn_captures_right - 1;
     }
 
     // knight moves
 
     let knights = pos.bb[Piece::Knight.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(knights, |from|knight_moves(from, allies)&enemies, &mut moves);
+    gen_non_batched_moves(knights, side, |from|knight_moves(from, allies)&enemies, &mut moves);
 
     // king moves
 
     let kings = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(kings, |from|king_moves(from, allies)&enemies, &mut moves);
+    gen_non_batched_moves(kings, side, |from|king_moves(from, allies)&enemies, &mut moves);
 
     // rook moves
 
     let rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(rooks, |from|rook_moves(from, occ, allies)&enemies, &mut moves);
+    gen_non_batched_moves(rooks, side, |from|rook_moves(from, occ, allies)&enemies, &mut moves);
 
     // bishop moves
 
     let bishops = pos.bb[Piece::Bishop.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(bishops, |from|bishop_moves(from, occ, allies)&enemies, &mut moves);
+    gen_non_batched_moves(bishops, side, |from|bishop_moves(from, occ, allies)&enemies, &mut moves);
 
     // queen moves
     
     let queens = pos.bb[Piece::Queen.bb_index(pos.to_move).unwrap()];
-    gen_non_batched_moves(queens, |from|queen_moves(from, occ, allies)&enemies, &mut moves);
+    gen_non_batched_moves(queens, side, |from|queen_moves(from, occ, allies)&enemies, &mut moves);
 
 
 
@@ -358,10 +362,7 @@ mod tests {
         let pos = Position::from_fen(KIWIPETE_FEN).unwrap();
 
         let filtered: std::collections::HashSet<Move> = gen_pseudolegal_moves(&pos).iter().copied().filter(|&mv|{
-            let piece = pos.board[mv.from()];
-            let capture_sq = pos.capture_sq(mv, piece, pos.to_move);
-            let capture_piece = pos.board[capture_sq];
-            capture_piece != Piece::None
+            pos.is_capture(mv).is_some()
         }).collect();
 
         let non_filtered: std::collections::HashSet<Move> = gen_pseudolegal_captures(&pos).iter().copied().collect();
