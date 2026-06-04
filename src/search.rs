@@ -4,9 +4,37 @@ use crate::movegen::*;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 #[derive(Clone)]
+struct TTEntry {
+    hash: u64,
+    mv: Move
+}
+
+const HASH_MOVE_SCORE:        i32 = 3_000_000;
+const CAPTURE_MOVE_SCORE:     i32 = 2_000_000;
+const NON_CAPTURE_MOVE_SCORE: i32 = 1_000_000;
+
+impl TTEntry {
+    fn empty() -> Self {
+        Self {
+            hash: 0,
+            mv: NULL_MOVE
+        }
+    }
+
+    fn new(hash: u64, mv: Move) -> Self {
+        Self {
+            hash,
+            mv
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Searcher {
-    stop: Arc<AtomicBool>,
+    pub stop: Arc<AtomicBool>,
     exited: bool,
+
+    tt: Vec<TTEntry>,
 
     time_limit_hard: f32,
     time_limit_soft: f32,
@@ -25,11 +53,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList) -> Self {
+    fn new(pos: &Position, moves: MoveList, hash_move: Move) -> Self {
         let mut scores = [0;_];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i]);
+            scores[i] = Self::score_move(pos, moves[i], hash_move);
         }
 
         Self {
@@ -39,13 +67,16 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move) -> i32 {
-        if let Some(capture_piece) = pos.is_capture(mv) {
+    fn score_move(pos: &Position, mv: Move, hash_move: Move) -> i32 {
+        if mv == hash_move {
+            HASH_MOVE_SCORE
+        }
+        else if let Some(capture_piece) = pos.is_capture(mv) {
             let piece = pos.board[mv.from()];
-            capture_piece.centipawn_value()*100 - piece.centipawn_value()
+            CAPTURE_MOVE_SCORE + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
         else {
-            0
+            NON_CAPTURE_MOVE_SCORE
         }
     }
 
@@ -74,18 +105,41 @@ impl MovePicker {
     }
 }
 
+const TT_SIZE: usize = 1 << 22;
+const TT_MASK: u64 = (TT_SIZE - 1) as u64;
+
 impl Searcher {
     pub fn new() -> Self {
         Self {
             stop: Arc::new(AtomicBool::new(false)),
             exited: false,
+
+            tt: vec![TTEntry::empty(); 1<<22],
+
             time_limit_hard: f32::INFINITY,
             time_limit_soft: f32::INFINITY,
             node_limit_hard: 1024*1024*1024,
             node_limit_soft: 1024*1024*1024,
+
             nodes: 0,
             start_time: std::time::Instant::now()
         }
+    }
+
+    fn tt_query(&self, hash: u64) -> Option<TTEntry> {
+        let index = (hash & TT_MASK) as usize;
+
+        if self.tt[index].hash == hash {
+            Some(self.tt[index].clone())
+        }
+        else {
+            None
+        }
+    }
+
+    fn tt_set(&mut self, hash: u64, mv: Move) {
+        let index = (hash & TT_MASK) as usize;
+        self.tt[index] = TTEntry::new(hash, mv);
     }
 
     pub fn nodes(&self) -> usize {
@@ -129,10 +183,6 @@ impl Searcher {
         self.start_time = std::time::Instant::now();
     }
 
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
-    }
-
     pub fn qsearch(&mut self, pos: &mut Position, ply: i32, mut alpha: i32, beta: i32) -> i32 {
         if self.exit_on_node() {
             return 0;
@@ -164,10 +214,18 @@ impl Searcher {
         };
 
 
+        let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+            entry.mv
+        }
+        else {
+            NULL_MOVE
+        };
 
-        let mut move_picker = MovePicker::new(pos, moves);
+
+        let mut move_picker = MovePicker::new(pos, moves, hash_move);
 
         let mut move_index = 0;
+        let mut best_move = NULL_MOVE;
 
         while let Some(mv) = move_picker.next() {
             pos.make_move(mv);
@@ -190,10 +248,14 @@ impl Searcher {
 
             if score > alpha {
                 alpha = score;
+                best_move = mv;
             }
 
             if alpha >= beta {
                 pos.unmake_move();
+
+                self.tt_set(pos.hash, mv);
+
                 return best_score;
             }
 
@@ -208,6 +270,8 @@ impl Searcher {
         if pos.halfmove_clock == 100 {
             return 0;
         }
+
+        self.tt_set(pos.hash, best_move);
 
         best_score
     }
@@ -229,8 +293,15 @@ impl Searcher {
             return (self.qsearch(pos, ply, alpha, beta), NULL_MOVE);
         }
 
+        let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+            entry.mv
+        }
+        else {
+            NULL_MOVE
+        };
+
         let moves = movegen::gen_pseudolegal_moves(pos);
-        let mut move_picker = MovePicker::new(pos, moves);
+        let mut move_picker = MovePicker::new(pos, moves, hash_move);
 
         let mut move_index = 0;
         
@@ -263,6 +334,9 @@ impl Searcher {
 
             if alpha >= beta {
                 pos.unmake_move();
+
+                self.tt_set(pos.hash, mv);
+
                 return (best_score, best_move);
             }
 
@@ -282,6 +356,8 @@ impl Searcher {
         if pos.halfmove_clock == 100 {
             return (0, NULL_MOVE);
         }
+
+        self.tt_set(pos.hash, best_move);
 
         (best_score, best_move)
     }
