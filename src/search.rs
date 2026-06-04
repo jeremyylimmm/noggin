@@ -370,13 +370,25 @@ impl Searcher {
                 break;
             }
 
-            let mv = self.search(pos, d, 0, -INF_SCORE, INF_SCORE).1;
+            let (score, mv) = self.search(pos, d, 0, -INF_SCORE, INF_SCORE);
 
             if self.exited {
                 break;
             }
 
+            let score_str = if score.abs() > MATE_SCORE - 1000 {
+                format!("mate {}{}", if score < 0 {"-"} else {""}, MATE_SCORE - score.abs())
+            }
+            else {
+                format!("cp {}", score)
+            };
+
+            let nps = (self.nodes as f32 / self.elapsed()).round() as i32;
+            let time = (self.elapsed() * 1000.0).round() as i32;
+
             best_move = mv;
+
+            println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
         }
         best_move
     }
