@@ -100,11 +100,8 @@ impl GoParameters {
                 params.infinite = true;
                 i += 1;
             }
-            else if args[i] == "movestogo" {
-                i += 2;
-            }
             else {
-                return Err(format!("unexpected value '{}'", args[i]));
+                i += 1;
             }
         }
 
