@@ -18,18 +18,24 @@ impl MoveList {
     pub fn swap(&mut self, a: usize, b: usize) {
         self.data.swap(a, b)
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Move> {
+        self.data[..self.len()].iter()
+    }
 }
 
 impl std::ops::Index<usize> for MoveList {
     type Output = Move;
 
     fn index(&self, index: usize) -> &Self::Output {
+        assert!(index < self.len());
         &self.data[index]
     }
 }
 
 impl std::ops::IndexMut<usize> for MoveList {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(index < self.len());
         &mut self.data[index]
     }
 }
@@ -263,4 +269,104 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 
 
     moves
+}
+
+pub fn gen_pseudolegal_captures(pos: &Position) -> MoveList {
+    let mut moves = MoveList {
+        data: [Move(0);_],
+        count: 0
+    };
+
+
+
+    // common masks
+
+    let occ = pos.bb.iter().fold(0, |acc, x|acc|x);
+    let allies = pos.bb[if matches!(pos.to_move, Side::White) {0..6} else {6..12}].iter().fold(0, |acc, x|acc|x);
+    let enemies = pos.bb[if matches!(pos.to_move, Side::Black) {0..6} else {6..12}].iter().fold(0, |acc, x|acc|x);
+    let ep_mask = if let Some(ep) = pos.ep_sq {1u64 << ep} else {0};
+
+    let promotion_rank = match pos.to_move {
+        Side::White => 7,
+        Side::Black => 0
+    };
+
+
+
+    // pawn captures
+
+    let pawns = pos.bb[Piece::Pawn.bb_index(pos.to_move).unwrap()];
+
+    let pawn_capture_mask = enemies | ep_mask;
+
+    let (mut pawn_captures_left, mut pawn_captures_right, pawn_capture_offset_left, pawn_capture_offset_right) = match pos.to_move {
+        Side::White => (white_pawn_captures_left(pawns, pawn_capture_mask), white_pawn_captures_right(pawns, pawn_capture_mask), 7, 9), 
+        Side::Black => (black_pawn_captures_left(pawns, pawn_capture_mask), black_pawn_captures_right(pawns, pawn_capture_mask), -9, -7), 
+    };
+
+    while pawn_captures_left != 0 {
+        let to = pawn_captures_left.trailing_zeros() as i32;
+        let from = to - pawn_capture_offset_left;
+        add_pawn_move(from, to, promotion_rank, &mut moves);
+        pawn_captures_left &= pawn_captures_left - 1;
+    }
+
+    while pawn_captures_right != 0 {
+        let to = pawn_captures_right.trailing_zeros() as i32;
+        let from = to - pawn_capture_offset_right;
+        add_pawn_move(from, to, promotion_rank, &mut moves);
+        pawn_captures_right &= pawn_captures_right - 1;
+    }
+
+    // knight moves
+
+    let knights = pos.bb[Piece::Knight.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(knights, |from|knight_moves(from, allies)&enemies, &mut moves);
+
+    // king moves
+
+    let kings = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(kings, |from|king_moves(from, allies)&enemies, &mut moves);
+
+    // rook moves
+
+    let rooks = pos.bb[Piece::Rook.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(rooks, |from|rook_moves(from, occ, allies)&enemies, &mut moves);
+
+    // bishop moves
+
+    let bishops = pos.bb[Piece::Bishop.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(bishops, |from|bishop_moves(from, occ, allies)&enemies, &mut moves);
+
+    // queen moves
+    
+    let queens = pos.bb[Piece::Queen.bb_index(pos.to_move).unwrap()];
+    gen_non_batched_moves(queens, |from|queen_moves(from, occ, allies)&enemies, &mut moves);
+
+
+
+
+    moves
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_capture_gen() {
+        let pos = Position::from_fen(KIWIPETE_FEN).unwrap();
+
+        let filtered: std::collections::HashSet<Move> = gen_pseudolegal_moves(&pos).iter().copied().filter(|&mv|{
+            let piece = pos.board[mv.from()];
+            let capture_sq = pos.capture_sq(mv, piece, pos.to_move);
+            let capture_piece = pos.board[capture_sq];
+            capture_piece != Piece::None
+        }).collect();
+
+        let non_filtered: std::collections::HashSet<Move> = gen_pseudolegal_captures(&pos).iter().copied().collect();
+
+        assert!(filtered.len() > 0);
+        assert_eq!(filtered, non_filtered);
+    }
 }
