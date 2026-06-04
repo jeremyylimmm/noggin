@@ -40,11 +40,8 @@ impl MovePicker {
     }
 
     fn score_move(pos: &Position, mv: Move) -> i32 {
-        let piece = pos.board[mv.from()];
-        let capture_sq = pos.capture_sq(mv, piece, pos.to_move);
-        let capture_piece = pos.board[capture_sq];
-
-        if capture_piece != Piece::None {
+        if let Some(capture_piece) = pos.is_capture(mv) {
+            let piece = pos.board[mv.from()];
             capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
         else {
@@ -143,8 +140,9 @@ impl Searcher {
 
         let side = pos.to_move;
         let in_check = pos.checked(side);
+        
 
-        if pos.halfmove_clock == 100 {
+        if pos.is_threefold_repetition() {
             return 0;
         }
 
@@ -207,6 +205,10 @@ impl Searcher {
             return -MATE_SCORE + ply;
         }
 
+        if pos.halfmove_clock == 100 {
+            return 0;
+        }
+
         best_score
     }
 
@@ -219,7 +221,7 @@ impl Searcher {
         let side = pos.to_move;
         let in_check = pos.checked(side);
 
-        if pos.halfmove_clock == 100 {
+        if pos.is_threefold_repetition() {
             return (0, NULL_MOVE);
         }
 
@@ -275,6 +277,10 @@ impl Searcher {
             else {
                 return (0, NULL_MOVE);
             }
+        }
+
+        if pos.halfmove_clock == 100 {
+            return (0, NULL_MOVE);
         }
 
         (best_score, best_move)

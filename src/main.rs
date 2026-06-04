@@ -229,7 +229,7 @@ fn main() {
 
                 let uci_mv = args[next];
 
-                let mv = if let Some(mv) = parse_uci_move(uci_mv) {
+                let mv = if let Some(mv) = parse_uci_move(uci_mv, pos.to_move) {
                     mv
                 }
                 else {

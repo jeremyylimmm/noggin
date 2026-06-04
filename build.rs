@@ -47,10 +47,7 @@ pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
 }
 
 fn find_magic(mask: u64) -> (u64, u32) {
-    let mut rng = PCG32 {
-        state: 3434,
-        inc: 3
-    };
+    let mut rng = PCG32::new(90847, 5);
 
     loop {
         let magic = rng.next64() & rng.next64() & rng.next64();
@@ -170,24 +167,16 @@ fn dump_table<T: fmt::LowerHex>(file: &mut File, name: &str, data: &[T], ty: &st
         write!(file, "0x{:x}, ", m).unwrap();
 
         if (i+1) % 8 == 0 {
-            if i > 0 {
-                write!(file, "\n").unwrap();
-            }
-
+            write!(file, "\n").unwrap();
         }
     }
     write!(file, "];\n\n").unwrap();
 }
 
 fn main() {
-    create_dir_all("src/generated").unwrap();
-    let mut file = File::create("src/generated/magic.rs").unwrap();
-
-    gen_table(&mut file, "ROOK", get_rook_mask, rook_attacks);
-    gen_table(&mut file, "BISHOP", get_bishop_mask, bishop_attacks);
-
+    generate_attack_tables();
+    generate_zobrist_tables();
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/generated/magic.rs");
 }
 
 struct PCG32 {
@@ -196,6 +185,17 @@ struct PCG32 {
 }
 
 impl PCG32 {
+    pub fn new(state: u64, inc: u64) -> Self {
+        let mut s = Self {
+            state,
+            inc
+        };
+
+        let _ = s.next64();
+
+        s
+    }
+
     fn next32(&mut self) -> u32 {
         let oldstate = self.state;
         // Advance internal state
@@ -230,4 +230,68 @@ impl StaticBitset {
     fn set(&mut self, idx: usize) {
         self.words[idx/64] |= 1u64 << (idx % 64);
     }
+}
+
+fn generate_attack_tables() {
+    create_dir_all("src/generated").unwrap();
+    let mut file = File::create("src/generated/magic.rs").unwrap();
+
+    gen_table(&mut file, "ROOK", get_rook_mask, rook_attacks);
+    gen_table(&mut file, "BISHOP", get_bishop_mask, bishop_attacks);
+    
+    println!("cargo:rerun-if-changed=src/generated/magic.rs");
+}
+
+fn generate_zobrist_tables() {
+    create_dir_all("src/generated").unwrap();
+    let mut file = File::create("src/generated/zobrist.rs").unwrap();
+
+    let mut rng = PCG32::new(239823, 3);
+
+    write!(file, "pub const BASE: u64 = 0x{:x};\n\n", rng.next64()).unwrap();
+    write!(file, "pub const TO_MOVE_BLACK: u64 = 0x{:x};\n\n", rng.next64()).unwrap();
+
+    write!(file, "pub const PIECE: [[u64;64]; 12] = [\n").unwrap();
+
+    for _ in 0..12 {
+        write!(file, "     [").unwrap();
+
+        for sq in 0..64 {
+            if sq > 0 {
+                write!(file, ", ").unwrap();
+            }
+            
+            write!(file, "0x{:x}", rng.next64()).unwrap();
+        }
+
+        write!(file, "],\n").unwrap();
+    }
+
+    write!(file, "];\n\n").unwrap();
+
+    let ep_sq: Vec<u64> = (0..64).map(|_|rng.next64()).collect();
+    dump_table(&mut file, "EP_SQUARE", &ep_sq, "u64");
+
+    let mut castling = [0u64;256];
+
+    for i in 0..8 {
+        castling[1 << i] = rng.next64();
+    }
+
+    for i in 0..256 {
+        let mut acc = 0;
+
+        let mut rem = i;
+        while rem != 0 {
+            let flag = (rem as u32).trailing_zeros() as usize;
+            acc ^= castling[1 << flag];
+            rem &= rem-1;
+        }
+
+        castling[i] = acc;
+    }
+
+    dump_table(&mut file, "CASTLING", &castling, "u64");
+
+    println!("cargo:rerun-if-changed=src/generated/zobrist.rs");
 }
