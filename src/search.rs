@@ -1,4 +1,5 @@
 use crate::*;
+use crate::movegen::*;
 
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
@@ -17,6 +18,64 @@ pub struct Searcher {
     start_time: std::time::Instant
 }
 
+struct MovePicker {
+    moves: MoveList,
+    scores: [i32; 256],
+    next: usize
+}
+
+impl MovePicker {
+    fn new(pos: &Position, moves: MoveList) -> Self {
+        let mut scores = [0;_];
+
+        for i in 0..moves.len() {
+            scores[i] = Self::score_move(pos, moves[i]);
+        }
+
+        Self {
+            moves,
+            scores,
+            next: 0
+        }
+    }
+
+    fn score_move(pos: &Position, mv: Move) -> i32 {
+        let piece = pos.board[mv.from()];
+        let capture_sq = pos.capture_sq(mv, piece, pos.to_move);
+        let capture_piece = pos.board[capture_sq];
+
+        if capture_piece != Piece::None {
+            capture_piece.centipawn_value()*100 - piece.centipawn_value()
+        }
+        else {
+            0
+        }
+    }
+
+    fn next(&mut self) -> Option<Move> {
+        if self.next >= self.moves.len() {
+            return None;
+        }
+
+        let mut best_index = self.next;
+        let mut best_score = self.scores[self.next];
+
+        for i in (self.next+1)..self.moves.len() {
+            if self.scores[i] > best_score {
+                best_index = i;
+                best_score = self.scores[i];
+            }
+        }
+
+        self.moves.swap(self.next, best_index);
+        self.scores.swap(self.next, best_index);
+
+        let mv = self.moves[self.next];
+        self.next += 1;
+
+        Some(mv)
+    }
+}
 
 impl Searcher {
     pub fn new() -> Self {
@@ -94,14 +153,14 @@ impl Searcher {
         }
 
         let moves = movegen::gen_pseudolegal_moves(pos);
+        let mut move_picker = MovePicker::new(pos, moves);
+
         let mut move_index = 0;
         
         let mut best_score = std::i32::MIN;
         let mut best_move = NULL_MOVE;
 
-        for pmi in 0..moves.len() {
-            let mv = moves[pmi];
-
+        while let Some(mv) = move_picker.next() {
             pos.make_move(mv);
 
             if pos.checked(side) {
