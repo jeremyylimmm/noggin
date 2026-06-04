@@ -1,6 +1,6 @@
 use crate::*;
 
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, time};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 #[derive(Clone)]
 pub struct Searcher {
