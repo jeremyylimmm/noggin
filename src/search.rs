@@ -386,9 +386,9 @@ impl Searcher {
             let nps = (self.nodes as f32 / self.elapsed()).round() as i32;
             let time = (self.elapsed() * 1000.0).round() as i32;
 
-            println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
-
             best_move = mv;
+
+            println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
         }
         best_move
     }
