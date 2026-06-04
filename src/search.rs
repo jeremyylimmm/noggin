@@ -142,35 +142,34 @@ impl Searcher {
         }
 
         let side = pos.to_move;
+        let in_check = pos.checked(side);
 
         if pos.halfmove_clock == 100 {
             return 0;
         }
 
 
+        let (mut best_score, moves) = if in_check {
+            (-INF_SCORE, movegen::gen_pseudolegal_moves(pos))
+        } else {
+            let stand_pat = pos.relative_eval();
+
+            if stand_pat > alpha {
+                alpha = stand_pat;
+            }
+
+            if alpha >= beta {
+                return stand_pat;
+            }
+
+            (stand_pat, movegen::gen_pseudolegal_captures(pos))
+        };
 
 
-        let stand_pat = pos.relative_eval();
 
-        if stand_pat > alpha {
-            alpha = stand_pat;
-        }
-
-        if alpha >= beta {
-            return stand_pat;
-        }
-
-
-
-
-
-        let moves = movegen::gen_pseudolegal_captures(pos);
         let mut move_picker = MovePicker::new(pos, moves);
 
-        let mut best_score = stand_pat;
-
-
-
+        let mut move_index = 0;
 
         while let Some(mv) = move_picker.next() {
             pos.make_move(mv);
@@ -201,6 +200,11 @@ impl Searcher {
             }
 
             pos.unmake_move();
+            move_index += 1;
+        }
+
+        if move_index == 0 && in_check {
+            return -MATE_SCORE + ply;
         }
 
         best_score
