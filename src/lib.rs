@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod perfttests;
 
+mod pesto;
+
 mod generated;
 pub mod search;
 
@@ -107,6 +109,13 @@ impl Move {
 }
 
 impl Piece {
+    pub fn id(&self) -> Option<usize> {
+        match self {
+            Piece::None => None,
+            &x => Some(x as usize - 1),
+        }
+    }
+
     pub fn bb_index(&self, side: Side) -> Option<usize> {
         if *self == Piece::None {
             None
@@ -494,16 +503,7 @@ impl Position {
     }
 
     fn eval(&self) -> i32 {
-        let mut sum = 0;
-
-        for side in [Side::White, Side::Black] {
-            for piece in [Piece::Pawn,Piece::Knight,Piece::Bishop,Piece::Rook,Piece::Queen] {
-                let bb = self.bb[piece.bb_index(side).unwrap()];
-                sum += side.sign() * bb.count_ones() as i32 * piece.centipawn_value();
-            }
-        }
-
-        sum
+        pesto::eval(&self.bb, &self.board)
     }
 
     fn relative_eval(&self) -> i32 {
