@@ -31,7 +31,7 @@ impl TTEntry {
 
 #[derive(Clone)]
 pub struct Searcher {
-    stop: Arc<AtomicBool>,
+    pub stop: Arc<AtomicBool>,
     exited: bool,
 
     tt: Vec<TTEntry>,
@@ -181,10 +181,6 @@ impl Searcher {
 
         self.nodes = 0;
         self.start_time = std::time::Instant::now();
-    }
-
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::Relaxed);
     }
 
     pub fn qsearch(&mut self, pos: &mut Position, ply: i32, mut alpha: i32, beta: i32) -> i32 {

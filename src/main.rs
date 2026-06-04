@@ -2,6 +2,9 @@
 use core::f32;
 
 use noggin::*;
+use noggin::search::*;
+
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 fn is_legal(pos: &mut Position, mv: Move) -> bool {
     let moves = movegen::gen_pseudolegal_moves(pos);
@@ -125,6 +128,23 @@ fn allocate_time(params: &GoParameters, to_move: Side) -> (f32, f32) {
     return (soft, hard);
 }
 
+enum Context {
+    Idle(Position, Searcher),
+    Searching(std::thread::JoinHandle<(Position, Searcher)>, Arc<AtomicBool>)
+}
+
+impl Context {
+    fn get(self) -> (Position, Searcher) {
+        match self {
+            Self::Idle(p, s) => (p, s),
+            Self::Searching(handle, stop) => {
+                stop.store(true, Ordering::Relaxed);
+                handle.join().unwrap()
+            }
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -135,19 +155,7 @@ fn main() {
         }
     }
 
-    let mut pos = Position::from_fen(STARTING_FEN).unwrap();
-    let mut s = search::Searcher::new();
-    let mut handle: Option<std::thread::JoinHandle<()>> = None;
-
-    macro_rules! stop {
-        () => {
-            s.stop();
-
-            if let Some(h) = handle.take() {
-                h.join().unwrap();
-            }
-        };
-    }
+    let mut context = Context::Idle(Position::from_fen(STARTING_FEN).unwrap(), Searcher::new());
 
     loop {
         let mut input = String::new();
@@ -157,62 +165,79 @@ fn main() {
         let args: Vec<&str> = input.split(' ').collect();
 
         if args[0] == "uci" {
-            stop!();
+            let (pos, searcher) = context.get();
+
             println!("id name Noggin");
             println!("id author Noggin Authors");
             println!("option name Hash type spin default 1 min 1 max 16");
             println!("option name Threads type spin default 1 min 1 max 1");
             println!("uciok");
+
+            context = Context::Idle(pos, searcher);
         }
         else if args[0] == "isready" {
-            stop!();
+            let (pos, searcher) = context.get();
+
             println!("readyok");
+
+            context = Context::Idle(pos, searcher);
         }
         else if args[0] == "quit" {
-            stop!();
+            context.get();
             return;
         }
         else if args[0] == "ucinewgame" {
-            stop!();
-            pos = Position::from_fen(STARTING_FEN).unwrap();
-            s = search::Searcher::new();
+            context.get();
+            let pos = Position::from_fen(STARTING_FEN).unwrap();
+            let searcher = search::Searcher::new();
+            context = Context::Idle(pos, searcher);
         }
         else if args[0] == "position" {
-            stop!();
-
+            let (prev, searcher) = context.get();
+            
             if args.len() < 2 {
                 println!("specify 'startpos' or 'fen'");
-                continue
+                context = Context::Idle(prev, searcher);
+                continue;
             }
 
-            let mut next = if args[1] == "startpos" {
-                pos = Position::from_fen(STARTING_FEN).unwrap();
-                2
+            let (mut pos, mut next) = if args[1] == "startpos" {
+                (
+                    Position::from_fen(STARTING_FEN).unwrap(),
+                    2
+                )
             }
             else if args[1] == "fen" {
                 if args.len() < 8 {
                     println!("expected a FEN string");
+                    context = Context::Idle(prev, searcher);
                     continue;
                 }
 
                 let fen = args[2..8].join(" ");
 
-                pos = if let Ok(p) = Position::from_fen(&fen) {
+                let pos = if let Ok(p) = Position::from_fen(&fen) {
                     p
                 }
                 else {
                     println!("malformed FEN '{}'", fen);
+                    context = Context::Idle(prev, searcher);
                     continue;
                 };
-
-                8
+                
+                (
+                    pos,
+                    8
+                )
             }
             else {
                 println!("expected 'startpos' or 'fen', got '{}'", args[1]);
+                context = Context::Idle(prev, searcher);
                 continue;
             };
 
             if args.len() <= next {
+                context = Context::Idle(pos, searcher);
                 continue;
             }
 
@@ -244,39 +269,47 @@ fn main() {
 
                 pos.make_move(mv);
             }
+
+            context = Context::Idle(pos, searcher);
         }
         else if args[0] == "go" {
-            stop!();
+            let (mut pos, mut searcher) = context.get();
 
             match GoParameters::parse(&args) {
                 Ok(params) => {
                     let (soft_time, hard_time) = allocate_time(&params, pos.to_move);
 
-                    s.reset(hard_time, soft_time, params.nodes, params.nodes);
+                    let stop = searcher.stop.clone();
+                    searcher.reset(hard_time, soft_time, params.nodes, params.nodes);
 
-                    let mut pos_copy  = pos.clone();
-                    let mut s_copy= s.clone();
-
-                    handle = Some(std::thread::spawn(move ||{
-                        let mv = s_copy.best(&mut pos_copy, params.depth as _);
+                    let handle = std::thread::spawn(move ||{
+                        let mv = searcher.best(&mut pos, params.depth as _);
                         println!("bestmove {}", mv.uci_string());
-                    }));
+                        (pos, searcher)
+                    });
+
+                    context = Context::Searching(handle, stop);
                 }
 
                 Err(e) => {
                     println!("invalid go command: {}", e);
+                    context = Context::Idle(pos, searcher);
                 }
+
             }
         }
         else if args[0] == "stop" {
-            stop!();
+            let (pos, searcher) = context.get();
+            context = Context::Idle(pos, searcher);
         }
         else if args[0] == "setoption" {
-            stop!();
+            let (pos, searcher) = context.get();
+            context = Context::Idle(pos, searcher);
         }
         else {
-            stop!();
+            let (pos, searcher) = context.get();
             println!("unrecognized command '{}'", input);
+            context = Context::Idle(pos, searcher);
         }
     }
 }
