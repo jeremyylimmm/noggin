@@ -6,7 +6,14 @@ pub struct MoveList {
 }
 
 impl MoveList {
-    fn push(&mut self, mv: Move) {
+    pub fn new() -> Self {
+        Self {
+            data: [NULL_MOVE;256],
+            count: 0
+        }
+    }
+
+    pub fn push(&mut self, mv: Move) {
         self.data[self.count] = mv;
         self.count += 1;
     }
