@@ -3,10 +3,20 @@ use crate::movegen::*;
 
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
+#[derive(Copy, Clone, PartialEq)]
+enum TTKind {
+    Exact,
+    Upper,
+    Lower
+}
+
 #[derive(Clone)]
 struct TTEntry {
     hash: u64,
-    mv: Move
+    mv: Move,
+    rel_score: i16,
+    kind: TTKind,
+    depth: i32,
 }
 
 const HASH_MOVE_SCORE:        i32 = 3_000_000;
@@ -19,15 +29,74 @@ impl TTEntry {
     fn empty() -> Self {
         Self {
             hash: 0,
-            mv: NULL_MOVE
+            mv: NULL_MOVE,
+            kind: TTKind::Exact,
+            rel_score: 0,
+            depth: 0
         }
     }
 
-    fn new(hash: u64, mv: Move) -> Self {
+    fn score(&self, ply: i32) -> i32 {
+        if self.rel_score.abs() as i32 > MATE_SCORE - 1000 {
+            if self.rel_score > 0 {
+                self.rel_score as i32 - ply
+            }
+            else {
+                self.rel_score as i32 + ply
+            }
+        }
+        else {
+            self.rel_score as i32
+        }
+    }
+
+    fn new(hash: u64, mv: Move, kind: TTKind, score: i32, ply: i32, depth: i32) -> Self {
+        let rel_score = if score.abs() > MATE_SCORE - 1000 {
+            if score > 0 {
+                score + ply
+            }
+            else {
+                score - ply
+            }
+        }
+        else {
+            score
+        } as i16;
+
+
         Self {
             hash,
-            mv
+            mv,
+            kind,
+            rel_score,
+            depth
         }
+    }
+
+    fn cutoff(&self, ply: i32, alpha: i32, beta: i32) -> Option<(i32, Move)> {
+        let score = self.score(ply);
+
+        match self.kind {
+            TTKind::Exact => {
+                if score > alpha && score < beta {
+                    return Some((score, self.mv));
+                }
+            }
+
+            TTKind::Lower => {
+                if score >= beta {
+                    return Some((score, NULL_MOVE));
+                }
+            }
+
+            TTKind::Upper => {
+                if score <= alpha {
+                    return Some((score, NULL_MOVE));
+                }
+            }
+        }
+
+        return None;
     }
 }
 
@@ -147,9 +216,10 @@ impl Searcher {
         }
     }
 
-    fn tt_set(&mut self, hash: u64, mv: Move) {
+    fn tt_set(&mut self, hash: u64, mv: Move, kind: TTKind, score: i32, ply: i32, depth: i32) {
         let index = (hash & TT_MASK) as usize;
-        self.tt[index] = TTEntry::new(hash, mv);
+
+        self.tt[index] = TTEntry::new(hash, mv, kind, score, ply, depth);
     }
 
     pub fn nodes(&self) -> usize {
@@ -198,9 +268,12 @@ impl Searcher {
             return 0;
         }
 
+        let alpha0 = alpha;
+
         let side = pos.to_move;
         let in_check = pos.checked(side);
         
+        let pv_node = beta > alpha + 1;
 
         if pos.is_threefold_repetition() {
             return 0;
@@ -225,6 +298,12 @@ impl Searcher {
 
 
         let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+            if !pv_node {
+                if let Some((score, _)) = entry.cutoff(ply, alpha, beta) {
+                    return score;
+                }
+            }
+
             entry.mv
         }
         else {
@@ -264,7 +343,7 @@ impl Searcher {
             if alpha >= beta {
                 pos.unmake_move();
 
-                self.tt_set(pos.hash, mv);
+                self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, 0);
 
                 return best_score;
             }
@@ -281,7 +360,7 @@ impl Searcher {
             return 0;
         }
 
-        self.tt_set(pos.hash, best_move);
+        self.tt_set(pos.hash, best_move, if best_score > alpha0 {TTKind::Exact} else {TTKind::Upper}, best_score, ply, 0);
 
         best_score
     }
@@ -291,6 +370,8 @@ impl Searcher {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
+
+        let alpha0 = alpha;
 
         let side = pos.to_move;
         let in_check = pos.checked(side);
@@ -306,6 +387,12 @@ impl Searcher {
         }
 
         let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+            if entry.depth >= depth && !pv_node {
+                if let Some((score, mv)) = entry.cutoff(ply, alpha, beta) {
+                    return (score, mv);
+                }
+            }
+
             entry.mv
         }
         else {
@@ -368,7 +455,7 @@ impl Searcher {
             if alpha >= beta {
                 pos.unmake_move();
 
-                self.tt_set(pos.hash, mv);
+                self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
 
                 if quiet {
                     let hist_bonus = 300 * depth - 250;
@@ -404,7 +491,7 @@ impl Searcher {
             return (0, NULL_MOVE);
         }
 
-        self.tt_set(pos.hash, best_move);
+        self.tt_set(pos.hash, best_move, if best_score > alpha0 {TTKind::Exact} else {TTKind::Upper}, best_score, ply, depth);
 
         (best_score, best_move)
     }
