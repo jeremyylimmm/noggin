@@ -418,7 +418,7 @@ impl Searcher {
 
         // null move pruning
 
-        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side);
+        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side) && depth > 3;
         
         if can_nmp {
             let r = 2 + depth / 6;
