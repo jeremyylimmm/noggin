@@ -319,7 +319,7 @@ fn bench_main() {
     let mut s = search::Searcher::new();
 
     s.reset(f32::INFINITY, f32::INFINITY, 1024*1024*1024, 1024*1024*1024);
-    s.best(&mut pos, 5);
+    s.best(&mut pos, 6);
 
     let nps = s.nodes() as f32 / s.elapsed(); 
 
