@@ -399,6 +399,8 @@ impl Searcher {
             NULL_MOVE
         };
 
+        let eval = pos.relative_eval();
+
 
 
         // reverse futility pruning
@@ -407,7 +409,6 @@ impl Searcher {
 
         if can_rfp {
             let rfp_margin = 150 * depth;
-            let eval = pos.relative_eval();
 
             if eval >= beta + rfp_margin {
                 return (eval, NULL_MOVE);
@@ -418,7 +419,7 @@ impl Searcher {
 
         // null move pruning
 
-        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side) && depth > 3;
+        let can_nmp = !in_check && eval >= beta && !pv_node && !pos.only_pawns(side) && depth > 3;
         
         if can_nmp {
             let r = 2 + depth / 6;
