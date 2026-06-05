@@ -736,6 +736,44 @@ impl Position {
         self.undos.push(undo);
     }
 
+    pub fn make_null_move(&mut self) {
+        self.undos.push(Undo{
+            mv: NULL_MOVE,
+            repetition_boundary: false,
+            capture_piece: None,
+            ep_sq: self.ep_sq,
+            castling: self.castling,
+            to_move: self.to_move,
+            halfmove_clock: self.halfmove_clock,
+            fullmoves: self.fullmoves,
+            hash: self.hash
+        });
+
+        if let Some(ep) = self.ep_sq.take() {
+            self.hash ^= zobrist::EP_SQUARE[ep];
+        }
+
+        self.halfmove_clock += 1;
+
+        if self.to_move == Side::Black {
+            self.fullmoves += 1;
+        }
+
+        self.to_move = self.to_move.opp();
+        self.hash ^= zobrist::TO_MOVE_BLACK;
+    }
+
+    pub fn unmake_null_move(&mut self) {
+        let undo = self.undos.pop().unwrap();
+
+        self.ep_sq = undo.ep_sq;
+        self.castling = undo.castling;
+        self.to_move = undo.to_move;
+        self.halfmove_clock = undo.halfmove_clock;
+        self.fullmoves = undo.fullmoves;
+        self.hash = undo.hash; 
+    }
+
     pub fn unmake_move(&mut self) {
         let undo = self.undos.pop().unwrap();
 
@@ -824,6 +862,14 @@ impl Position {
         }
 
         hash
+    }
+
+    pub fn only_pawns(&self, side: Side) -> bool {
+        let knights = self.bb[Piece::Knight.bb_index(side).unwrap()] != 0;
+        let bishops = self.bb[Piece::Bishop.bb_index(side).unwrap()] != 0;
+        let rooks = self.bb[Piece::Rook.bb_index(side).unwrap()] != 0;
+        let queen = self.bb[Piece::Queen.bb_index(side).unwrap()] != 0;
+        return !knights && !bishops && !rooks && !queen;
     }
 
     pub fn perft(&mut self, depth: isize) -> usize {

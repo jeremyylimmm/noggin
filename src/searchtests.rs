@@ -342,6 +342,10 @@ fn test_zobrist(pos: &mut Position, depth: i32) {
             }
             pos.unmake_move();
         }
+
+        pos.make_null_move();
+        test_zobrist(pos, depth-1);
+        pos.unmake_null_move();
     }
 }
 

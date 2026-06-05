@@ -413,7 +413,19 @@ impl Searcher {
                 return (eval, NULL_MOVE);
             }
         }
+        
 
+
+        /*
+        // null move pruning
+
+        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side);
+        
+        if can_nmp {
+            let r = 2 + depth / 6;
+            let v = self.search();
+        }
+        */
 
 
         let moves = movegen::gen_pseudolegal_moves(pos);
