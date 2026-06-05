@@ -344,7 +344,9 @@ fn test_zobrist(pos: &mut Position, depth: i32) {
         }
 
         pos.make_null_move();
-        test_zobrist(pos, depth-1);
+        if !pos.checked(side) {
+            test_zobrist(pos, depth-1);
+        }
         pos.unmake_null_move();
     }
 }

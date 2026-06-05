@@ -593,6 +593,8 @@ impl Position {
         let capture_piece = self.board[capture_sq];
 
         if capture_piece != Piece::None {
+            assert!(capture_piece != Piece::King);
+
             undo.capture_piece = Some(capture_piece);
             undo.repetition_boundary = true;
 
