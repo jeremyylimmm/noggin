@@ -399,6 +399,23 @@ impl Searcher {
             NULL_MOVE
         };
 
+
+
+        // reverse futility pruning
+
+        let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
+
+        if can_rfp {
+            let rfp_margin = 150 * depth;
+            let eval = pos.relative_eval();
+
+            if eval >= beta + rfp_margin {
+                return (eval, NULL_MOVE);
+            }
+        }
+
+
+
         let moves = movegen::gen_pseudolegal_moves(pos);
         let mut move_picker = MovePicker::new(pos, moves, hash_move, &self.history);
 
