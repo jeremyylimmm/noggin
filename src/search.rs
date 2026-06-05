@@ -11,7 +11,9 @@ struct TTEntry {
 
 const HASH_MOVE_SCORE:        i32 = 3_000_000;
 const CAPTURE_MOVE_SCORE:     i32 = 2_000_000;
-const NON_CAPTURE_MOVE_SCORE: i32 = 1_000_000;
+const QUIET_MOVE_SCORE:       i32 = 1_000_000;
+
+const MAX_HISTORY: i16 = 30_000;
 
 impl TTEntry {
     fn empty() -> Self {
@@ -35,6 +37,7 @@ pub struct Searcher {
     exited: bool,
 
     tt: Vec<TTEntry>,
+    history: Box<[[[i16; 64]; 64];2]>,
 
     time_limit_hard: f32,
     time_limit_soft: f32,
@@ -53,11 +56,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList, hash_move: Move) -> Self {
+    fn new(pos: &Position, moves: MoveList, hash_move: Move, history: &[[[i16;64];64]; 2]) -> Self {
         let mut scores = [0;_];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i], hash_move);
+            scores[i] = Self::score_move(pos, moves[i], hash_move, history);
         }
 
         Self {
@@ -67,7 +70,7 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move, hash_move: Move) -> i32 {
+    fn score_move(pos: &Position, mv: Move, hash_move: Move, history: &[[[i16;64];64]; 2]) -> i32 {
         if mv == hash_move {
             HASH_MOVE_SCORE
         }
@@ -76,7 +79,7 @@ impl MovePicker {
             CAPTURE_MOVE_SCORE + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
         else {
-            NON_CAPTURE_MOVE_SCORE
+            QUIET_MOVE_SCORE + history[mv.side().id()][mv.from()][mv.to()] as i32
         }
     }
 
@@ -115,6 +118,7 @@ impl Searcher {
             exited: false,
 
             tt: vec![TTEntry::empty(); 1<<22],
+            history: Box::new([[[0; 64]; 64]; 2]),
 
             time_limit_hard: f32::INFINITY,
             time_limit_soft: f32::INFINITY,
@@ -124,6 +128,12 @@ impl Searcher {
             nodes: 0,
             start_time: std::time::Instant::now()
         }
+    }
+
+    fn update_history(&mut self, mv: Move, bonus: i16) {
+        let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
+        let x = &mut self.history[mv.side().id()][mv.from()][mv.to()];
+        *x += clamped - *x * clamped.abs() / MAX_HISTORY;
     }
 
     fn tt_query(&self, hash: u64) -> Option<TTEntry> {
@@ -222,7 +232,7 @@ impl Searcher {
         };
 
 
-        let mut move_picker = MovePicker::new(pos, moves, hash_move);
+        let mut move_picker = MovePicker::new(pos, moves, hash_move, &self.history);
 
         let mut move_index = 0;
         let mut best_move = NULL_MOVE;
@@ -301,14 +311,18 @@ impl Searcher {
         };
 
         let moves = movegen::gen_pseudolegal_moves(pos);
-        let mut move_picker = MovePicker::new(pos, moves, hash_move);
+        let mut move_picker = MovePicker::new(pos, moves, hash_move, &self.history);
 
         let mut move_index = 0;
         
         let mut best_score = std::i32::MIN;
         let mut best_move = NULL_MOVE;
 
+        let mut quiets = MoveList::new();
+
         while let Some(mv) = move_picker.next() {
+            let quiet = pos.is_capture(mv).is_none();
+
             pos.make_move(mv);
 
             if pos.checked(side) {
@@ -337,10 +351,24 @@ impl Searcher {
 
                 self.tt_set(pos.hash, mv);
 
+                if quiet {
+                    let hist_bonus = 300 * depth - 250;
+                    self.update_history(mv, hist_bonus as i16);
+
+                    for q in quiets.iter() {
+                        self.update_history(*q, -hist_bonus as i16); 
+                    }
+                }
+
                 return (best_score, best_move);
             }
 
             pos.unmake_move();
+
+            if quiet {
+                quiets.push(mv);
+            }
+
             move_index += 1;
         }
 
