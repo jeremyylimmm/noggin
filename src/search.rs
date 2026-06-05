@@ -499,16 +499,45 @@ impl Searcher {
     pub fn best(&mut self, pos: &mut Position, depth: i32) -> Move {
         let mut best_move = NULL_MOVE;
 
+        let mut window_centre = 0i32;
+
         for d in 1..=depth {
             if self.nodes >= self.node_limit_soft || self.elapsed() >= self.time_limit_soft * 0.95 {
                 break;
             }
 
-            let (score, mv) = self.search(pos, d, 0, -INF_SCORE, INF_SCORE);
+            let mut window_lo = 25;
+            let mut window_hi = 25;
+
+            let (score, mv) = loop {
+                let (alpha, beta) = if d < 4 {
+                    (-INF_SCORE, INF_SCORE)
+                }
+                else {
+                    (
+                        (window_centre - window_lo).clamp(-INF_SCORE, INF_SCORE),
+                        (window_centre + window_hi).clamp(-INF_SCORE, INF_SCORE)
+                    )
+                };
+
+                let (score, mv) = self.search(pos, d, 0, alpha, beta);
+
+                if (score > alpha && score < beta) || self.exited {
+                    break (score, mv);
+                }
+                else if score <= alpha {
+                    window_lo *= 2;
+                }
+                else {
+                    window_hi *= 2;
+                }
+            };
 
             if self.exited {
                 break;
             }
+
+            window_centre = score;
 
             let score_str = if score.abs() > MATE_SCORE - 1000 {
                 format!("mate {}{}", if score < 0 {"-"} else {""}, MATE_SCORE - score.abs())
