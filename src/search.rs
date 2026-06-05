@@ -403,7 +403,7 @@ impl Searcher {
 
         // reverse futility pruning
 
-        let can_rfp = !pv_node && !in_check;
+        let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
 
         if can_rfp {
             let rfp_margin = 150 * depth;
