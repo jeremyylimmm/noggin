@@ -295,6 +295,8 @@ impl Searcher {
         let side = pos.to_move;
         let in_check = pos.checked(side);
 
+        let pv_node = beta > alpha + 1;
+
         if pos.is_threefold_repetition() {
             return (0, NULL_MOVE);
         }
@@ -330,7 +332,24 @@ impl Searcher {
                 continue
             }
 
-            let score = -self.search(pos, depth-1, ply+1, -beta, -alpha).0;
+
+
+            // principal variation search
+
+            let mut score = -INF_SCORE;
+
+            if !pv_node || (move_index > 0) {
+                score = -self.search(pos, depth-1, ply+1, -(alpha+1), -alpha).0;
+            }
+
+            if pv_node && (move_index == 0 || score > alpha) {
+                score = -self.search(pos, depth-1, ply+1, -beta, -alpha).0;
+            }
+
+
+
+
+
 
             if self.exited {
                 pos.unmake_move();
