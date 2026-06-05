@@ -366,7 +366,7 @@ impl Searcher {
     }
 
 
-    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32, mut alpha: i32, beta: i32, allow_null: bool) -> (i32, Move) {
+    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
@@ -418,13 +418,13 @@ impl Searcher {
 
         // null move pruning
 
-        let can_nmp = allow_null && !in_check && !pv_node && !pos.only_pawns(side) && depth > 3;
+        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side) && depth > 3;
         
         if can_nmp {
             let r = 2 + depth / 6;
 
             pos.make_null_move();
-            let (v, _) = self.search(pos, depth-1-r, ply+1, -beta, -(beta-1), false);
+            let v = -self.search(pos, depth-1-r, ply+1, -beta, -(beta-1)).0;
             pos.unmake_null_move();
 
             if v >= beta {
@@ -460,11 +460,11 @@ impl Searcher {
             let mut score = -INF_SCORE;
 
             if !pv_node || (move_index > 0) {
-                score = -self.search(pos, depth-1, ply+1, -(alpha+1), -alpha, true).0;
+                score = -self.search(pos, depth-1, ply+1, -(alpha+1), -alpha).0;
             }
 
             if pv_node && (move_index == 0 || score > alpha) {
-                score = -self.search(pos, depth-1, ply+1, -beta, -alpha, true).0;
+                score = -self.search(pos, depth-1, ply+1, -beta, -alpha).0;
             }
 
 
@@ -554,7 +554,7 @@ impl Searcher {
                     )
                 };
 
-                let (score, mv) = self.search(pos, d, 0, alpha, beta, true);
+                let (score, mv) = self.search(pos, d, 0, alpha, beta);
 
                 if (score > alpha && score < beta) || self.exited {
                     break (score, mv);
