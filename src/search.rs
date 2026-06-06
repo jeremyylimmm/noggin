@@ -21,7 +21,8 @@ struct TTEntry {
     depth: i32,
 }
 
-const HASH_MOVE_SCORE:        i32 = 4_000_000;
+const HASH_MOVE_SCORE:        i32 = 5_000_000;
+const PROMOTION_MOVE_SCORE:   i32 = 4_000_000;
 const CAPTURE_MOVE_SCORE:     i32 = 3_000_000;
 const KILLER_MOVE_SCORE:      i32 = 2_000_000;
 const QUIET_MOVE_SCORE:       i32 = 1_000_000;
@@ -148,6 +149,9 @@ impl MovePicker {
 
         if mv == hash_move {
             HASH_MOVE_SCORE
+        }
+        else if mv.promotion() != Piece::None {
+            PROMOTION_MOVE_SCORE + mv.promotion().centipawn_value()
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
             let piece = pos.board[mv.from()];
