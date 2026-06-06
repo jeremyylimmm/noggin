@@ -481,8 +481,6 @@ impl Searcher {
                 continue
             }
 
-            let gives_check = pos.checked(side.opp());
-
             // late move reduction
 
             let mut lmr = 0;
@@ -495,11 +493,9 @@ impl Searcher {
 
             // futility pruning
 
-            let can_fp = !in_check && !pv_node && move_index > 0 && !gives_check && quiet && alpha.abs() < MATE_SCORE - 1000;
-            let lmr_depth = depth - lmr;
-            let fp_margin = 300 + 250 * lmr_depth;
+            let fp_margin = eval + 200 * depth ;
 
-            if can_fp && eval < alpha - fp_margin {
+            if depth < 4 && !in_check && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 {
                 pos.unmake_move();
                 continue;
             }
