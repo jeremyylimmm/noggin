@@ -474,6 +474,8 @@ impl Searcher {
 
         let mut quiets = MoveList::new();
 
+        let can_lmp = !pv_node && !in_check && !pos.only_pawns(side);
+
         while let Some(mv) = move_picker.next() {
             let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
 
@@ -488,9 +490,7 @@ impl Searcher {
 
             // late move pruning
 
-            let can_lmp = !pv_node && !in_check && !pos.only_pawns(side) && best_score > -MATE_SCORE + 1000;
-
-            if can_lmp && !gives_check && quiet && move_index > (2 + depth*depth) {
+            if can_lmp && best_score > -MATE_SCORE + 1000 && !gives_check && quiet && move_index > (2 + depth*depth) {
                 pos.unmake_move();
                 continue;
             }
