@@ -3,6 +3,8 @@ use crate::movegen::*;
 
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
+const MAX_DEPTH: usize = 128;
+
 #[derive(Copy, Clone, PartialEq)]
 enum TTKind {
     Exact,
@@ -19,8 +21,9 @@ struct TTEntry {
     depth: i32,
 }
 
-const HASH_MOVE_SCORE:        i32 = 3_000_000;
-const CAPTURE_MOVE_SCORE:     i32 = 2_000_000;
+const HASH_MOVE_SCORE:        i32 = 4_000_000;
+const CAPTURE_MOVE_SCORE:     i32 = 3_000_000;
+const KILLER_MOVE_SCORE:      i32 = 2_000_000;
 const QUIET_MOVE_SCORE:       i32 = 1_000_000;
 
 const MAX_HISTORY: i16 = 30_000;
@@ -107,6 +110,7 @@ pub struct Searcher {
 
     tt: Vec<TTEntry>,
     history: Box<[[[i16; 64]; 64];2]>,
+    killers: Box<[[Move; 2]; MAX_DEPTH]>,
 
     time_limit_hard: f32,
     time_limit_soft: f32,
@@ -125,11 +129,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList, hash_move: Move, history: &[[[i16;64];64]; 2]) -> Self {
+    fn new(searcher: &Searcher, pos: &Position, moves: MoveList, hash_move: Move, ply: i32) -> Self {
         let mut scores = [0;_];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i], hash_move, history);
+            scores[i] = Self::score_move(searcher, pos, moves[i], hash_move, ply);
         }
 
         Self {
@@ -139,7 +143,9 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move, hash_move: Move, history: &[[[i16;64];64]; 2]) -> i32 {
+    fn score_move(searcher: &Searcher, pos: &Position, mv: Move, hash_move: Move, ply: i32) -> i32 {
+        let ply = ply as usize;
+
         if mv == hash_move {
             HASH_MOVE_SCORE
         }
@@ -147,8 +153,11 @@ impl MovePicker {
             let piece = pos.board[mv.from()];
             CAPTURE_MOVE_SCORE + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
+        else if mv == searcher.killers[ply][0] || mv == searcher.killers[ply][1] {
+            KILLER_MOVE_SCORE
+        }
         else {
-            QUIET_MOVE_SCORE + history[mv.side().id()][mv.from()][mv.to()] as i32
+            QUIET_MOVE_SCORE + searcher.history[mv.side().id()][mv.from()][mv.to()] as i32
         }
     }
 
@@ -188,6 +197,7 @@ impl Searcher {
 
             tt: vec![TTEntry::empty(); 1<<22],
             history: Box::new([[[0; 64]; 64]; 2]),
+            killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
 
             time_limit_hard: f32::INFINITY,
             time_limit_soft: f32::INFINITY,
@@ -213,6 +223,15 @@ impl Searcher {
         }
         else {
             None
+        }
+    }
+
+    fn add_killer(&mut self, mv: Move, ply: i32) {
+        let ply = ply as usize;
+
+        if mv != self.killers[ply][0] && mv != self.killers[ply][1] {
+            self.killers[ply][1] = self.killers[ply][0];
+            self.killers[ply][0] = mv;
         }
     }
 
@@ -311,12 +330,14 @@ impl Searcher {
         };
 
 
-        let mut move_picker = MovePicker::new(pos, moves, hash_move, &self.history);
+        let mut move_picker = MovePicker::new(self, pos, moves, hash_move, ply);
 
         let mut move_index = 0;
         let mut best_move = NULL_MOVE;
 
         while let Some(mv) = move_picker.next() {
+            let quiet = pos.is_capture(mv).is_none();
+
             pos.make_move(mv);
 
             if pos.checked(side) {
@@ -342,6 +363,10 @@ impl Searcher {
 
             if alpha >= beta {
                 pos.unmake_move();
+
+                if quiet {
+                    self.add_killer(mv, ply);
+                }
 
                 self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, 0);
 
@@ -434,7 +459,7 @@ impl Searcher {
 
 
         let moves = movegen::gen_pseudolegal_moves(pos);
-        let mut move_picker = MovePicker::new(pos, moves, hash_move, &self.history);
+        let mut move_picker = MovePicker::new(self, pos, moves, hash_move, ply);
 
         let mut move_index = 0;
         
@@ -506,6 +531,8 @@ impl Searcher {
                 self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
 
                 if quiet {
+                    self.add_killer(mv, ply);
+
                     let hist_bonus = 300 * depth - 250;
                     self.update_history(mv, hist_bonus as i16);
 
