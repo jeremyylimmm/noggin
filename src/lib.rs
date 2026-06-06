@@ -553,10 +553,8 @@ impl Position {
         let from = mv.from();
         let to = mv.to();
 
-        let from_rank = (from >> 3) & 7;
-        let from_file = from & 7;
-
-        let to_rank = (to >> 3) & 7;
+        let (from_rank, from_file) = rank_and_file(from);
+        let (to_rank, _) = rank_and_file(to);
 
         let start = self.board[from];
         let end = match mv.promotion() {
@@ -687,9 +685,9 @@ impl Position {
 
         // handle if we capture the other player's rook
 
-        let capture_rank = (capture_sq >> 3) & 7;
+        let (capture_rank, capture_file) = rank_and_file(capture_sq);
 
-        match (capture_piece, capture_sq & 7, opp_can_kcastle, opp_can_qcastle) {
+        match (capture_piece, capture_file, opp_can_kcastle, opp_can_qcastle) {
             (Piece::Rook, 0, _, true) if capture_rank == promotion_rank => {
                 self.castling &= !opp_qcastle_flag;
             }
@@ -783,8 +781,8 @@ impl Position {
     }
 
     fn capture_sq(&self, mv: Move, piece: Piece) -> usize {
-        let from_file = mv.from() & 7;
-        let to_file = mv.to() & 7;
+        let (_, from_file) = rank_and_file(mv.from());
+        let (_, to_file) = rank_and_file(mv.to());
 
         let to = mv.to();
 
@@ -1024,8 +1022,8 @@ pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
 
 
 fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
-    let from_file = mv.from() & 7;
-    let to_file = mv.to() & 7;
+    let (from_rank, from_file) = rank_and_file(mv.from());
+    let (_, to_file) = rank_and_file(mv.to());
 
     let castle = piece == Piece::King && from_file.abs_diff(to_file) > 1;
 
@@ -1033,11 +1031,9 @@ fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
         return None;
     }
 
-    let rank = (mv.from() >> 3) & 7;
-
-    Some(match mv.to() & 7 {
-        2 => (rank*8+0, rank*8+3),
-        6 => (rank*8+7, rank*8+5),
+    Some(match to_file {
+        2 => (from_rank*8+0, from_rank*8+3),
+        6 => (from_rank*8+7, from_rank*8+5),
         _ => panic!("invalid king move")
     })
 }
@@ -1089,4 +1085,11 @@ pub fn benchmark_perft() {
     println!("Elapsed: {:?}", duration);
     println!("NPS: {:.2}M", nps/1_000_000.0);
     println!("");
+}
+
+fn rank_and_file(sq: usize) -> (usize, usize) {
+    (
+        (sq >> 3) & 7,
+        sq & 7
+    )
 }

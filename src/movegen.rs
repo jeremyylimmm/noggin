@@ -117,9 +117,9 @@ fn gen_non_batched_moves<F: Fn(u32)->u64>(mut pieces: u64, side: Side, f: F, mov
 }
 
 fn add_pawn_move(from: i32, to: i32, side: Side, promotion_rank: i32, moves: &mut MoveList) {
-    let to_rank = (to >> 3) & 7;
+    let (to_rank, _) = rank_and_file(to as usize);
 
-    if to_rank == promotion_rank {
+    if to_rank == promotion_rank as usize {
         moves.push(Move::new(from as usize, to as usize, Piece::Knight, side));
         moves.push(Move::new(from as usize, to as usize, Piece::Bishop, side));
         moves.push(Move::new(from as usize, to as usize, Piece::Rook, side));
@@ -238,8 +238,7 @@ pub fn gen_pseudolegal_moves(pos: &Position) -> MoveList {
 
     let king_sq = pos.bb[Piece::King.bb_index(pos.to_move).unwrap()].trailing_zeros();
 
-    let king_rank = (king_sq >> 3) & 7;
-    let king_file = king_sq & 7;
+    let (king_rank, king_file) = rank_and_file(king_sq as usize);
 
     let home_rank_mask = 0xff << (home_rank*8);
     let kcastle_path = (FILE_F | FILE_G) & home_rank_mask;
