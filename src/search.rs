@@ -453,6 +453,16 @@ impl Searcher {
                 continue
             }
 
+            // late move reduction
+
+            let mut lmr = 0;
+            let can_lmr = move_index > 2 && depth > 2;
+
+            if can_lmr {
+                let frac = 0.2 + (depth as f32).ln() * (move_index as f32).ln() / 3.35;
+                lmr = (frac.round() as i32).max(0);
+            }
+
 
 
             // principal variation search
@@ -460,7 +470,11 @@ impl Searcher {
             let mut score = -INF_SCORE;
 
             if !pv_node || (move_index > 0) {
-                score = -self.search(pos, depth-1, ply+1, -(alpha+1), -alpha).0;
+                score = -self.search(pos, depth-1-lmr, ply+1, -(alpha+1), -alpha).0;
+
+                if lmr > 0 && score > alpha {
+                    score = -self.search(pos, depth-1, ply+1, -(alpha+1), -alpha).0;
+                }
             }
 
             if pv_node && (move_index == 0 || score > alpha) {
