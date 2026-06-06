@@ -493,9 +493,9 @@ impl Searcher {
 
             // futility pruning
 
-            let fp_margin = eval + 200 * depth ;
+            let fp_margin = eval + 200 * depth;
 
-            if depth < 4 && !in_check && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 {
+            if depth < 6 && !in_check && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 {
                 pos.unmake_move();
                 continue;
             }
