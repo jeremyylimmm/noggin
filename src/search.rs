@@ -340,7 +340,7 @@ impl Searcher {
         let mut best_move = NULL_MOVE;
 
         while let Some(mv) = move_picker.next() {
-            let quiet = pos.is_capture(mv).is_none();
+            let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
 
             pos.make_move(mv);
 
@@ -473,7 +473,7 @@ impl Searcher {
         let mut quiets = MoveList::new();
 
         while let Some(mv) = move_picker.next() {
-            let quiet = pos.is_capture(mv).is_none();
+            let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
 
             pos.make_move(mv);
 
