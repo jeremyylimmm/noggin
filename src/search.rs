@@ -425,6 +425,9 @@ impl Searcher {
         };
 
 
+        let eval = pos.relative_eval();
+
+
 
         // reverse futility pruning
 
@@ -432,7 +435,6 @@ impl Searcher {
 
         if can_rfp {
             let rfp_margin = 150 * depth;
-            let eval = pos.relative_eval();
 
             if eval >= beta + rfp_margin {
                 return (eval, NULL_MOVE);
@@ -477,6 +479,18 @@ impl Searcher {
                 pos.unmake_move();
                 continue
             }
+
+            let gives_check = pos.checked(side.opp());
+
+            // late move pruning
+
+            let can_lmp = !pv_node && !in_check && !pos.only_pawns(side) && best_score > -MATE_SCORE + 1000;
+
+            if can_lmp && !gives_check && quiet && move_index > (2 + depth*depth) {
+                pos.unmake_move();
+                continue;
+            }
+
 
             // late move reduction
 
