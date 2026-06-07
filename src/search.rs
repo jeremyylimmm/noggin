@@ -395,7 +395,7 @@ impl Searcher {
     }
 
 
-    pub fn search(&mut self, pos: &mut Position, depth: i32, ply: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
+    pub fn search(&mut self, pos: &mut Position, mut depth: i32, ply: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
@@ -427,6 +427,12 @@ impl Searcher {
         else {
             NULL_MOVE
         };
+
+        // internal iterative reductions
+
+        if hash_move == NULL_MOVE && depth > 5 {
+            depth -= 1;
+        }
 
         let eval = pos.relative_eval();
 
