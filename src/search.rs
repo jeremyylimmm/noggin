@@ -496,11 +496,7 @@ impl Searcher {
         let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
 
         if can_rfp {
-            let mut rfp_margin = 150 * depth;
-
-            if improving {
-                rfp_margin /= 2
-            }
+            let mut rfp_margin = 150 * (depth - improving as i32);
 
             if eval >= beta + rfp_margin {
                 return (eval, NULL_MOVE);
