@@ -392,6 +392,10 @@ impl Searcher {
         while let Some(mv) = move_picker.next() {
             let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
 
+            if !pv_node && !in_check && !quiet && see_capture(pos, mv) < 0 {
+                continue;
+            }
+
             pos.make_move(mv);
 
             if pos.checked(side) {
