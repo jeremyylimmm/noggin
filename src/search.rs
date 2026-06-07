@@ -125,6 +125,7 @@ pub struct Searcher {
     qnodes: usize,
     tt_attempts: usize,
     tt_hits: usize,
+    tt_collisions: usize,
     start_time: std::time::Instant
 }
 
@@ -219,12 +220,21 @@ impl Searcher {
             qnodes: 0,
             tt_attempts: 0,
             tt_hits: 0,
+            tt_collisions: 0,
             start_time: std::time::Instant::now()
         }
     }
 
-    pub fn tt_hitrate(&self) -> f32 {
+    pub fn tt_hit_rate(&self) -> f32 {
         self.tt_hits as f32 / self.tt_attempts as f32
+    }
+
+    pub fn tt_collision_rate(&self) -> f32 {
+        self.tt_collisions as f32 / self.tt_attempts as f32
+    }
+
+    pub fn tt_fill(&self) -> f32 {
+        self.tt.iter().map(|x|if x.hash != 0 {1} else {0}).sum::<i32>() as f32 / self.tt.len() as f32
     }
 
     pub fn disable_uci(&mut self) {
@@ -237,16 +247,23 @@ impl Searcher {
         *x += clamped - *x * clamped.abs() / MAX_HISTORY;
     }
 
-    fn tt_query(&mut self, hash: u64) -> Option<TTEntry> {
+    fn tt_query<const METRICS: bool>(&mut self, hash: u64) -> Option<TTEntry> {
         let index = (hash & TT_MASK) as usize;
 
-        self.tt_attempts += 1;
+        if METRICS {
+            self.tt_attempts += 1;
+        }
 
         if self.tt[index].hash == hash {
-            self.tt_hits += 1;
+            if METRICS {
+                self.tt_hits += 1;
+            }
             Some(self.tt[index].clone())
         }
         else {
+            if self.tt[index].hash != 0 && METRICS {
+                self.tt_collisions += 1;
+            }
             None
         }
     }
@@ -311,6 +328,7 @@ impl Searcher {
         self.qnodes = 0;
         self.tt_attempts = 0;
         self.tt_hits = 0;
+        self.tt_collisions = 0;
         self.start_time = std::time::Instant::now();
     }
 
@@ -350,7 +368,7 @@ impl Searcher {
         };
 
 
-        let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+        let hash_move = if let Some(entry) = self.tt_query::<false>(pos.hash) {
             if !pv_node {
                 if let Some((score, _)) = entry.cutoff(ply, alpha, beta) {
                     return score;
@@ -445,7 +463,7 @@ impl Searcher {
             return (self.qsearch(pos, ply, alpha, beta), NULL_MOVE);
         }
 
-        let hash_move = if let Some(entry) = self.tt_query(pos.hash) {
+        let hash_move = if let Some(entry) = self.tt_query::<true>(pos.hash) {
             if entry.depth >= depth && !pv_node {
                 if let Some((score, mv)) = entry.cutoff(ply, alpha, beta) {
                     return (score, mv);
