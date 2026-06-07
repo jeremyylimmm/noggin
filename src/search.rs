@@ -428,7 +428,7 @@ impl Searcher {
             NULL_MOVE
         };
 
-
+        let eval = pos.relative_eval();
 
         // reverse futility pruning
 
@@ -436,7 +436,6 @@ impl Searcher {
 
         if can_rfp {
             let rfp_margin = 150 * depth;
-            let eval = pos.relative_eval();
 
             if eval >= beta + rfp_margin {
                 return (eval, NULL_MOVE);
@@ -482,6 +481,15 @@ impl Searcher {
                 continue
             }
 
+            // futility pruning
+
+            let fp_margin = eval + 200 * depth;
+
+            if depth < 6 && !in_check && quiet && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 && best_score > -MATE_SCORE + 1000 {
+                pos.unmake_move();
+                continue;
+            }
+
             // late move reduction
 
             let mut lmr = 0;
@@ -491,8 +499,6 @@ impl Searcher {
                 let frac = 0.2 + (depth as f32).ln() * (move_index as f32).ln() / 3.35;
                 lmr = (frac.round() as i32).max(0);
             }
-
-
 
             // principal variation search
 
