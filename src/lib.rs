@@ -433,6 +433,10 @@ impl Position {
         self.sq_attacked(king_sq as _, side.opp()) 
     }
 
+    pub fn occ(&self) -> u64 {
+        self.bb.iter().fold(0, |acc, x|acc|x)
+    }
+
     pub fn sq_attacked(&self, sq: usize, attacker: Side) -> bool {
         let occ = self.bb.iter().fold(0, |acc, x|acc|x);
 
@@ -870,6 +874,60 @@ impl Position {
         let rooks = self.bb[Piece::Rook.bb_index(side).unwrap()] != 0;
         let queen = self.bb[Piece::Queen.bb_index(side).unwrap()] != 0;
         return !knights && !bishops && !rooks && !queen;
+    }
+
+    fn detect_attacker(&self, piece: Piece, side: Side, mask: u64) -> Option<(Piece, usize)> {
+        let bb = self.bb[piece.bb_index(side).unwrap()];
+        
+        if (bb & mask) != 0 {
+            Some((piece, (bb & mask).trailing_zeros() as usize))
+        }
+        else {
+            None
+        }
+    }
+
+    pub fn smallest_attacker(&self, sq: usize, attacker: Side, occ: u64) -> Option<(Piece, usize)> {
+        let pawn_mask = match attacker {
+            Side::Black => white_pawn_attacks(1u64 << sq),
+            Side::White => black_pawn_attacks(1u64 << sq),
+        } & occ;
+
+        if let Some(x) = self.detect_attacker(Piece::Pawn, attacker, pawn_mask) {
+            return Some(x);
+        }
+
+        let knight_mask = knight_attacks(sq as u32) & occ;
+
+        if let Some(x) = self.detect_attacker(Piece::Knight, attacker, knight_mask) {
+            return Some(x);
+        }
+
+        let bishop_mask = bishop_attacks(sq as u32, occ) & occ;
+
+        if let Some(x) = self.detect_attacker(Piece::Bishop, attacker, bishop_mask) {
+            return Some(x);
+        }
+
+        let rook_mask = rook_attacks(sq as u32, occ) & occ;
+
+        if let Some(x) = self.detect_attacker(Piece::Rook, attacker, rook_mask) {
+            return Some(x);
+        }
+
+        let queen_mask = rook_mask | bishop_mask;
+
+        if let Some(x) = self.detect_attacker(Piece::Queen, attacker, queen_mask) {
+            return Some(x);
+        }
+
+        let king_mask = king_attacks(sq as u32) & occ;
+
+        if let Some(x) = self.detect_attacker(Piece::King, attacker, king_mask) {
+            return Some(x);
+        }
+
+        return None;
     }
 
     pub fn perft(&mut self, depth: isize) -> usize {

@@ -21,11 +21,12 @@ struct TTEntry {
     depth: i32,
 }
 
-const HASH_MOVE_SCORE:        i32 = 5_000_000;
-const PROMOTION_MOVE_SCORE:   i32 = 4_000_000;
-const CAPTURE_MOVE_SCORE:     i32 = 3_000_000;
-const KILLER_MOVE_SCORE:      i32 = 2_000_000;
-const QUIET_MOVE_SCORE:       i32 = 1_000_000;
+const HASH_MOVE_SCORE:         i32 = 6_000_000;
+const PROMOTION_MOVE_SCORE:    i32 = 5_000_000;
+const GOOD_CAPTURE_MOVE_SCORE: i32 = 4_000_000;
+const KILLER_MOVE_SCORE:       i32 = 3_000_000;
+const QUIET_MOVE_SCORE:        i32 = 2_000_000;
+const BAD_CAPTURE_MOVE_SCORE:  i32 = 1_000_000;
 
 const MAX_HISTORY: i16 = 30_000;
 
@@ -161,7 +162,8 @@ impl MovePicker {
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
             let piece = pos.board[mv.from()];
-            CAPTURE_MOVE_SCORE + capture_piece.centipawn_value()*100 - piece.centipawn_value()
+            let base = if see_capture(pos, mv) < 0 {BAD_CAPTURE_MOVE_SCORE} else {GOOD_CAPTURE_MOVE_SCORE};
+            base + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
         else if mv == searcher.killers[ply][0] || mv == searcher.killers[ply][1] {
             KILLER_MOVE_SCORE
@@ -689,5 +691,33 @@ impl Searcher {
             }
         }
         best_move
+    }
+}
+
+fn see(pos: &Position, sq: usize, cur: Piece, side: Side, occ: u64) -> i32 {
+    if let Some((attacker, attacker_sq)) = pos.smallest_attacker(sq, side, occ) {
+        if attacker == Piece::King && pos.smallest_attacker(sq, side.opp(), occ).is_some() {
+            0
+        }
+        else {
+            let value = cur.centipawn_value() - see(pos, sq, attacker, side.opp(), occ & !(1u64 << attacker_sq));
+            value.max(0)
+        }
+    }
+    else {
+        0
+    }
+}
+
+fn see_capture(pos: &Position, mv: Move) -> i32 {
+    let occ = pos.occ();
+
+    if let Some(capture_piece) = pos.is_capture(mv) {
+        let sq = mv.to();
+        let value = capture_piece.centipawn_value() - see(pos, sq, pos.board[mv.from()], mv.side().opp(), occ & !(1u64 << mv.from()));
+        value
+    }
+    else {
+        panic!("only captures can be see-ed");
     }
 }
