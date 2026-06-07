@@ -153,6 +153,10 @@ fn main() {
             bench_main();
             return;
         }
+        else if option == "metrics" {
+            metrics_main();
+            return;
+        }
     }
 
     let mut context = Context::Idle(Position::from_fen(STARTING_FEN).unwrap(), Searcher::new());
@@ -324,4 +328,25 @@ fn bench_main() {
     let nps = s.nodes() as f32 / s.elapsed(); 
 
     println!("{} nodes {} nps", s.nodes(), nps.round() as usize);
+}
+
+fn metrics_main() {
+    for d in 1..=12 {
+        let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
+        let mut s = search::Searcher::new();
+
+        s.reset(f32::INFINITY, f32::INFINITY, 1024*1024*1024, 1024*1024*1024);
+        s.disable_uci();
+
+        s.best(&mut pos, d);
+
+        println!("metrics depth {}", d);
+        println!("=================");
+        println!("time: {:.2}s", s.elapsed());
+        println!("nodes: {}", s.nodes());
+        println!("qnodes: {} ({:.2}%)", s.qnodes(), s.qnodes() as f32 / s.nodes() as f32 * 100.0);
+        println!("nps: {:.2}M", s.nodes() as f32 / s.elapsed() / 1_000_000.0);
+        println!("tt-hit: {:.2}%", s.tt_hitrate() * 100.0);
+        println!("");
+    }
 }

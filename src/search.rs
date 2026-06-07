@@ -113,6 +113,8 @@ pub struct Searcher {
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
 
+    enable_uci: bool,
+
     time_limit_hard: f32,
     time_limit_soft: f32,
 
@@ -120,6 +122,9 @@ pub struct Searcher {
     node_limit_soft: usize,
 
     nodes: usize,
+    qnodes: usize,
+    tt_attempts: usize,
+    tt_hits: usize,
     start_time: std::time::Instant
 }
 
@@ -203,14 +208,27 @@ impl Searcher {
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
 
+            enable_uci: true,
+
             time_limit_hard: f32::INFINITY,
             time_limit_soft: f32::INFINITY,
             node_limit_hard: 1024*1024*1024,
             node_limit_soft: 1024*1024*1024,
 
             nodes: 0,
+            qnodes: 0,
+            tt_attempts: 0,
+            tt_hits: 0,
             start_time: std::time::Instant::now()
         }
+    }
+
+    pub fn tt_hitrate(&self) -> f32 {
+        self.tt_hits as f32 / self.tt_attempts as f32
+    }
+
+    pub fn disable_uci(&mut self) {
+        self.enable_uci = false;
     }
 
     fn update_history(&mut self, mv: Move, bonus: i16) {
@@ -219,10 +237,13 @@ impl Searcher {
         *x += clamped - *x * clamped.abs() / MAX_HISTORY;
     }
 
-    fn tt_query(&self, hash: u64) -> Option<TTEntry> {
+    fn tt_query(&mut self, hash: u64) -> Option<TTEntry> {
         let index = (hash & TT_MASK) as usize;
 
+        self.tt_attempts += 1;
+
         if self.tt[index].hash == hash {
+            self.tt_hits += 1;
             Some(self.tt[index].clone())
         }
         else {
@@ -247,6 +268,10 @@ impl Searcher {
 
     pub fn nodes(&self) -> usize {
         self.nodes
+    }
+
+    pub fn qnodes(&self) -> usize {
+        self.qnodes
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -283,6 +308,9 @@ impl Searcher {
         self.node_limit_soft = node_limit_soft;
 
         self.nodes = 0;
+        self.qnodes = 0;
+        self.tt_attempts = 0;
+        self.tt_hits = 0;
         self.start_time = std::time::Instant::now();
     }
 
@@ -290,6 +318,8 @@ impl Searcher {
         if self.exit_on_node() {
             return 0;
         }
+
+        self.qnodes += 1;
 
         let alpha0 = alpha;
 
@@ -636,7 +666,9 @@ impl Searcher {
 
             best_move = mv;
 
-            println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
+            if self.enable_uci {
+                println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
+            }
         }
         best_move
     }
