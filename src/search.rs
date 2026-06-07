@@ -430,7 +430,7 @@ impl Searcher {
 
         // internal iterative reductions
 
-        if hash_move == NULL_MOVE && depth > 5 {
+        if hash_move == NULL_MOVE && depth > 3 && !in_check {
             depth -= 1;
         }
 
