@@ -365,6 +365,7 @@ macro_rules! register_zobrist_test {
     };
 }
 
+
 register_zobrist_test!(test_zobrist_suite_0, 0);
 register_zobrist_test!(test_zobrist_suite_1, 1);
 register_zobrist_test!(test_zobrist_suite_2, 2);
@@ -493,3 +494,170 @@ register_zobrist_test!(test_zobrist_suite_124, 124);
 register_zobrist_test!(test_zobrist_suite_125, 125);
 register_zobrist_test!(test_zobrist_suite_126, 126);
 register_zobrist_test!(test_zobrist_suite_127, 127);
+
+fn test_eval(pos: &mut Position, depth: i32) {
+    assert_eq!(pos.compute_eval(), pos.eval());
+
+    if depth > 0 {
+        let side = pos.to_move;
+        let moves = movegen::gen_pseudolegal_moves(pos);
+
+        for i in 0..moves.len() {
+            let mv = moves[i];
+            pos.make_move(mv);
+            if !pos.checked(side) {
+                test_eval(pos, depth-1);
+            }
+            pos.unmake_move();
+        }
+
+        pos.make_null_move();
+        if !pos.checked(side) {
+            test_eval(pos, depth-1);
+        }
+        pos.unmake_null_move();
+    }
+}
+
+macro_rules! register_eval_test {
+    ($name:ident, $index:expr) => {
+        #[test]
+        fn $name() {
+            let (fen, counts) = &get_perft_suite()[$index];
+
+            let mut pos = Position::from_fen(fen).unwrap();
+            let depth = counts.len() as i32;
+
+            test_eval(&mut pos, depth);
+        }
+    };
+}
+
+register_eval_test!(test_eval_suite_0, 0);
+register_eval_test!(test_eval_suite_1, 1);
+register_eval_test!(test_eval_suite_2, 2);
+register_eval_test!(test_eval_suite_3, 3);
+register_eval_test!(test_eval_suite_4, 4);
+register_eval_test!(test_eval_suite_5, 5);
+register_eval_test!(test_eval_suite_6, 6);
+register_eval_test!(test_eval_suite_7, 7);
+register_eval_test!(test_eval_suite_8, 8);
+register_eval_test!(test_eval_suite_9, 9);
+register_eval_test!(test_eval_suite_10, 10);
+register_eval_test!(test_eval_suite_11, 11);
+register_eval_test!(test_eval_suite_12, 12);
+register_eval_test!(test_eval_suite_13, 13);
+register_eval_test!(test_eval_suite_14, 14);
+register_eval_test!(test_eval_suite_15, 15);
+register_eval_test!(test_eval_suite_16, 16);
+register_eval_test!(test_eval_suite_17, 17);
+register_eval_test!(test_eval_suite_18, 18);
+register_eval_test!(test_eval_suite_19, 19);
+register_eval_test!(test_eval_suite_20, 20);
+register_eval_test!(test_eval_suite_21, 21);
+register_eval_test!(test_eval_suite_22, 22);
+register_eval_test!(test_eval_suite_23, 23);
+register_eval_test!(test_eval_suite_24, 24);
+register_eval_test!(test_eval_suite_25, 25);
+register_eval_test!(test_eval_suite_26, 26);
+register_eval_test!(test_eval_suite_27, 27);
+register_eval_test!(test_eval_suite_28, 28);
+register_eval_test!(test_eval_suite_29, 29);
+register_eval_test!(test_eval_suite_30, 30);
+register_eval_test!(test_eval_suite_31, 31);
+register_eval_test!(test_eval_suite_32, 32);
+register_eval_test!(test_eval_suite_33, 33);
+register_eval_test!(test_eval_suite_34, 34);
+register_eval_test!(test_eval_suite_35, 35);
+register_eval_test!(test_eval_suite_36, 36);
+register_eval_test!(test_eval_suite_37, 37);
+register_eval_test!(test_eval_suite_38, 38);
+register_eval_test!(test_eval_suite_39, 39);
+register_eval_test!(test_eval_suite_40, 40);
+register_eval_test!(test_eval_suite_41, 41);
+register_eval_test!(test_eval_suite_42, 42);
+register_eval_test!(test_eval_suite_43, 43);
+register_eval_test!(test_eval_suite_44, 44);
+register_eval_test!(test_eval_suite_45, 45);
+register_eval_test!(test_eval_suite_46, 46);
+register_eval_test!(test_eval_suite_47, 47);
+register_eval_test!(test_eval_suite_48, 48);
+register_eval_test!(test_eval_suite_49, 49);
+register_eval_test!(test_eval_suite_50, 50);
+register_eval_test!(test_eval_suite_51, 51);
+register_eval_test!(test_eval_suite_52, 52);
+register_eval_test!(test_eval_suite_53, 53);
+register_eval_test!(test_eval_suite_54, 54);
+register_eval_test!(test_eval_suite_55, 55);
+register_eval_test!(test_eval_suite_56, 56);
+register_eval_test!(test_eval_suite_57, 57);
+register_eval_test!(test_eval_suite_58, 58);
+register_eval_test!(test_eval_suite_59, 59);
+register_eval_test!(test_eval_suite_60, 60);
+register_eval_test!(test_eval_suite_61, 61);
+register_eval_test!(test_eval_suite_62, 62);
+register_eval_test!(test_eval_suite_63, 63);
+register_eval_test!(test_eval_suite_64, 64);
+register_eval_test!(test_eval_suite_65, 65);
+register_eval_test!(test_eval_suite_66, 66);
+register_eval_test!(test_eval_suite_67, 67);
+register_eval_test!(test_eval_suite_68, 68);
+register_eval_test!(test_eval_suite_69, 69);
+register_eval_test!(test_eval_suite_70, 70);
+register_eval_test!(test_eval_suite_71, 71);
+register_eval_test!(test_eval_suite_72, 72);
+register_eval_test!(test_eval_suite_73, 73);
+register_eval_test!(test_eval_suite_74, 74);
+register_eval_test!(test_eval_suite_75, 75);
+register_eval_test!(test_eval_suite_76, 76);
+register_eval_test!(test_eval_suite_77, 77);
+register_eval_test!(test_eval_suite_78, 78);
+register_eval_test!(test_eval_suite_79, 79);
+register_eval_test!(test_eval_suite_80, 80);
+register_eval_test!(test_eval_suite_81, 81);
+register_eval_test!(test_eval_suite_82, 82);
+register_eval_test!(test_eval_suite_83, 83);
+register_eval_test!(test_eval_suite_84, 84);
+register_eval_test!(test_eval_suite_85, 85);
+register_eval_test!(test_eval_suite_86, 86);
+register_eval_test!(test_eval_suite_87, 87);
+register_eval_test!(test_eval_suite_88, 88);
+register_eval_test!(test_eval_suite_89, 89);
+register_eval_test!(test_eval_suite_90, 90);
+register_eval_test!(test_eval_suite_91, 91);
+register_eval_test!(test_eval_suite_92, 92);
+register_eval_test!(test_eval_suite_93, 93);
+register_eval_test!(test_eval_suite_94, 94);
+register_eval_test!(test_eval_suite_95, 95);
+register_eval_test!(test_eval_suite_96, 96);
+register_eval_test!(test_eval_suite_97, 97);
+register_eval_test!(test_eval_suite_98, 98);
+register_eval_test!(test_eval_suite_99, 99);
+register_eval_test!(test_eval_suite_100, 100);
+register_eval_test!(test_eval_suite_101, 101);
+register_eval_test!(test_eval_suite_102, 102);
+register_eval_test!(test_eval_suite_103, 103);
+register_eval_test!(test_eval_suite_104, 104);
+register_eval_test!(test_eval_suite_105, 105);
+register_eval_test!(test_eval_suite_106, 106);
+register_eval_test!(test_eval_suite_107, 107);
+register_eval_test!(test_eval_suite_108, 108);
+register_eval_test!(test_eval_suite_109, 109);
+register_eval_test!(test_eval_suite_110, 110);
+register_eval_test!(test_eval_suite_111, 111);
+register_eval_test!(test_eval_suite_112, 112);
+register_eval_test!(test_eval_suite_113, 113);
+register_eval_test!(test_eval_suite_114, 114);
+register_eval_test!(test_eval_suite_115, 115);
+register_eval_test!(test_eval_suite_116, 116);
+register_eval_test!(test_eval_suite_117, 117);
+register_eval_test!(test_eval_suite_118, 118);
+register_eval_test!(test_eval_suite_119, 119);
+register_eval_test!(test_eval_suite_120, 120);
+register_eval_test!(test_eval_suite_121, 121);
+register_eval_test!(test_eval_suite_122, 122);
+register_eval_test!(test_eval_suite_123, 123);
+register_eval_test!(test_eval_suite_124, 124);
+register_eval_test!(test_eval_suite_125, 125);
+register_eval_test!(test_eval_suite_126, 126);
+register_eval_test!(test_eval_suite_127, 127);

@@ -161,6 +161,12 @@ const EG_PESTO_TABLE: [&[i32]; 6] = [
 const GAME_PHASE_INC: [i32; 6] = [0,1,1,2,4,0];
 
 pub fn eval(bb: &[u64], board: &[Piece]) -> i32 {
+    let (mg_score, eg_score, mg_phase) = eval_internal(bb, board);
+    let eg_phase = 24 - mg_phase;
+    (mg_score * mg_phase + eg_score * eg_phase) / 24
+}
+
+pub fn eval_internal(bb: &[u64], board: &[Piece]) -> (i32, i32, i32) {
     let mut mg = [0i32; 2];
     let mut eg = [0i32; 2];
     let mut game_phase = 0;
@@ -193,7 +199,41 @@ pub fn eval(bb: &[u64], board: &[Piece]) -> i32 {
     let eg_score = eg[0] - eg[1];
 
     let mg_phase = game_phase.min(24);
-    let eg_phase = 24 - mg_phase;
 
-    return (mg_score * mg_phase + eg_score * eg_phase) / 24;
+    (mg_score, eg_score, mg_phase)
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Incremental {
+    mg_score: i32,
+    eg_score: i32,
+    mg_phase: i32
+}
+
+impl Incremental {
+    pub fn new(bb: &[u64], board: &[Piece]) -> Self {
+        let (mg_score, eg_score, mg_phase) = eval_internal(bb, board);
+        Self {
+            mg_score,
+            eg_score,
+            mg_phase
+        }
+    }
+
+    pub fn get(&self) -> i32 {
+        let mg_phase = self.mg_phase.min(24);
+        let eg_phase = 24 - mg_phase;
+        (mg_phase * self.mg_score + eg_phase * self.eg_score) / 24
+    }
+
+    pub fn add_piece<const SIGN: i32>(&mut self, piece: Piece, sq: usize, side: Side) {
+        let pc = piece.id().unwrap();
+
+        let sq_idx = if side == Side::White {sq^56} else {sq};
+
+        self.mg_score += side.sign() * SIGN * (MG_PESTO_TABLE[pc][sq_idx] + MG_VALUE[pc]);
+        self.eg_score += side.sign() * SIGN * (EG_PESTO_TABLE[pc][sq_idx] + EG_VALUE[pc]);
+
+        self.mg_phase = self.mg_phase + SIGN * GAME_PHASE_INC[pc];
+    }
 }
