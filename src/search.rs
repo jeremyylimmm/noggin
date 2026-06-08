@@ -110,16 +110,15 @@ impl TTEntry {
 }
 
 struct ContinuationTable {
-    data: [[[i16;64];6];2]
+    data: [[i16;64];6]
 }
 
 impl ContinuationTable {
     fn update(&mut self, pos: &Position, mv: Move, bonus: i16) {
         let piece = pos.board[mv.from()];
-        let side = mv.side().id();
         let to = mv.to();
 
-        let x = &mut self.data[side][piece.id().unwrap()][to];
+        let x = &mut self.data[piece.id().unwrap()][to];
 
         let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
         *x += clamped - *x * clamped.abs() / MAX_HISTORY;
@@ -150,7 +149,7 @@ pub struct Searcher {
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
-    cont_hist: Box<[ContinuationTable;64*6*2]>,
+    cont_hist: Box<[[ContinuationTable;64*6]; 2]>,
 
     enable_uci: bool,
 
@@ -215,7 +214,8 @@ impl MovePicker {
                 }
 
                 if let Some(cont_idx) = searcher.ss[ply-i].cont {
-                    value += searcher.cont_hist[cont_idx].data[mv.side().id()][piece.id().unwrap()][mv.to()] as i32;
+                    let cont = searcher.cont_hist[mv.side().id()][cont_idx].data[piece.id().unwrap()][mv.to()] as i32; 
+                    value += cont*2;
                 }
             }
 
@@ -254,7 +254,7 @@ const TT_MASK: u64 = (TT_SIZE - 1) as u64;
 impl ContinuationTable {
     fn new() -> Self {
         Self {
-            data: [[[0;_];_];_]
+            data: [[0;_];_]
         }
     }
 }
@@ -269,7 +269,7 @@ impl Searcher {
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
-            cont_hist: Box::new(std::array::from_fn(|_|ContinuationTable::new())),
+            cont_hist: Box::new(std::array::from_fn(|_|std::array::from_fn(|_|ContinuationTable::new()))),
 
             enable_uci: true,
 
@@ -676,10 +676,10 @@ impl Searcher {
                         }
 
                         if let Some(cont_idx) = self.ss[ply-i].cont {
-                            self.cont_hist[cont_idx].update(pos, mv, hist_bonus as i16);
+                            self.cont_hist[side.id()][cont_idx].update(pos, mv, hist_bonus as i16);
 
                             for &q in quiets.iter() {
-                                self.cont_hist[cont_idx].update(pos, q, -hist_bonus as i16);
+                                self.cont_hist[side.id()][cont_idx].update(pos, q, -hist_bonus as i16);
                             }
                         }
                     }
@@ -792,12 +792,11 @@ impl Searcher {
             se
         }
         else {
-            let side = pos.to_move.id();
             let piece = pos.board[mv.from()].id().unwrap();
             let to = mv.to();
 
             let se = SearchEntry {
-                cont: Some(side*(6*64)+(piece*64)+to),
+                cont: Some((piece*64)+to),
                 eval: pos.relative_eval(),
                 mv
             };
