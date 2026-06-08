@@ -113,6 +113,19 @@ struct ContinuationTable {
     data: [[[i16;64];6];2]
 }
 
+impl ContinuationTable {
+    fn update(&mut self, pos: &Position, mv: Move, bonus: i16) {
+        let piece = pos.board[mv.from()];
+        let side = mv.side().id();
+        let to = mv.to();
+
+        let x = &mut self.data[side][piece.id().unwrap()][to];
+
+        let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
+        *x += clamped - *x * clamped.abs() / MAX_HISTORY;
+    }
+}
+
 struct SearchEntry {
     cont: Option<usize>,
     eval: i32,
@@ -177,6 +190,8 @@ impl MovePicker {
     }
 
     fn score_move(searcher: &Searcher, pos: &Position, mv: Move, hash_move: Move, ply: usize) -> i32 {
+        let piece = pos.board[mv.from()];
+
         if mv == hash_move {
             HASH_MOVE_SCORE
         }
@@ -184,7 +199,6 @@ impl MovePicker {
             PROMOTION_MOVE_SCORE + mv.promotion().centipawn_value()
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
-            let piece = pos.board[mv.from()];
             let base = if see_capture(pos, mv) < 0 {BAD_CAPTURE_MOVE_SCORE} else {GOOD_CAPTURE_MOVE_SCORE};
             base + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
@@ -192,7 +206,20 @@ impl MovePicker {
             KILLER_MOVE_SCORE
         }
         else {
-            QUIET_MOVE_SCORE + searcher.history[mv.side().id()][mv.from()][mv.to()] as i32
+            let mut value = QUIET_MOVE_SCORE;
+            value += searcher.history[mv.side().id()][mv.from()][mv.to()] as i32;
+
+            for i in [1] {
+                if ply < i {
+                    continue;
+                }
+
+                if let Some(cont_idx) = searcher.ss[ply-i].cont {
+                    value += searcher.cont_hist[cont_idx].data[mv.side().id()][piece.id().unwrap()][mv.to()] as i32;
+                }
+            }
+
+            value
         }
     }
 
@@ -641,6 +668,20 @@ impl Searcher {
 
                     for q in quiets.iter() {
                         self.update_history(*q, -hist_bonus as i16); 
+                    }
+
+                    for i in [1] {
+                        if ply < i {
+                            continue;
+                        }
+
+                        if let Some(cont_idx) = self.ss[ply-i].cont {
+                            self.cont_hist[cont_idx].update(pos, mv, hist_bonus as i16);
+
+                            for &q in quiets.iter() {
+                                self.cont_hist[cont_idx].update(pos, q, -hist_bonus as i16);
+                            }
+                        }
                     }
                 }
 
