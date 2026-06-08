@@ -542,6 +542,7 @@ impl Position {
         self.pesto_incr.get()
     }
 
+    #[allow(unused)]
     fn compute_eval(&self) -> i32 {
         pesto::eval(&self.bb, &self.board)
     }
