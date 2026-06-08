@@ -113,6 +113,7 @@ pub struct Searcher {
     tt: Vec<TTEntry>,
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
+    evals: Box<[i32;MAX_DEPTH]>,
 
     enable_uci: bool,
 
@@ -210,6 +211,7 @@ impl Searcher {
             tt: vec![TTEntry::empty(); 1<<22],
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
+            evals: Box::new([0;MAX_DEPTH]),
 
             enable_uci: true,
 
@@ -484,12 +486,17 @@ impl Searcher {
 
         let eval = pos.relative_eval();
 
+        // improving heuristic
+
+        self.evals[ply as usize] = eval;
+        let improving = !in_check && ply >= 2 && eval > self.evals[ply as usize - 2];
+
         // reverse futility pruning
 
         let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
 
         if can_rfp {
-            let rfp_margin = 150 * depth;
+            let rfp_margin = 150 * (depth - improving as i32);
 
             if eval >= beta + rfp_margin {
                 return (eval, NULL_MOVE);
