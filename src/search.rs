@@ -120,6 +120,7 @@ pub struct Searcher {
 
     tt: Vec<TTEntry>,
     history: Box<[[[i16; 64]; 64];2]>,
+    capture_history: Box<[[[[i16; 6]; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
 
@@ -168,9 +169,8 @@ impl MovePicker {
             PROMOTION_MOVE_SCORE + mv.promotion().centipawn_value()
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
-            let piece = pos.board[mv.from()];
             let base = if see_capture(pos, mv) < 0 {BAD_CAPTURE_MOVE_SCORE} else {GOOD_CAPTURE_MOVE_SCORE};
-            base + capture_piece.centipawn_value()*100 - piece.centipawn_value()
+            base + searcher.capture_history[mv.side().id()][mv.from()][mv.to()][capture_piece.id().unwrap()] as i32
         }
         else if mv == searcher.killers[ply][0] || mv == searcher.killers[ply][1] {
             KILLER_MOVE_SCORE
@@ -216,6 +216,7 @@ impl Searcher {
 
             tt: vec![TTEntry::empty(); 1<<22],
             history: Box::new([[[0; 64]; 64]; 2]),
+            capture_history: Box::new([[[[0;_]; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
 
@@ -254,6 +255,12 @@ impl Searcher {
     fn update_history(&mut self, mv: Move, bonus: i16) {
         let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
         let x = &mut self.history[mv.side().id()][mv.from()][mv.to()];
+        *x += clamped - *x * clamped.abs() / MAX_HISTORY;
+    }
+
+    fn update_capture_history(&mut self, mv: Move, cap_piece: Piece, bonus: i16) {
+        let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
+        let x = &mut self.capture_history[mv.side().id()][mv.from()][mv.to()][cap_piece.id().unwrap()];
         *x += clamped - *x * clamped.abs() / MAX_HISTORY;
     }
 
@@ -398,7 +405,8 @@ impl Searcher {
         let mut best_move = NULL_MOVE;
 
         while let Some(mv) = move_picker.next() {
-            let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
+            let capture_piece = pos.is_capture(mv);
+            let quiet = capture_piece.is_none() && mv.promotion() == Piece::None;
 
             if !pv_node && !in_check && !quiet && see_capture(pos, mv) < 0 {
                 continue;
@@ -440,6 +448,7 @@ impl Searcher {
             }
 
             self.pop_move(pos);
+
             move_index += 1;
         }
 
@@ -538,9 +547,11 @@ impl Searcher {
         let mut best_move = NULL_MOVE;
 
         let mut quiets = MoveList::new();
+        let mut captures = MoveList::new();
 
         while let Some(mv) = move_picker.next() {
-            let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
+            let capture_piece = pos.is_capture(mv);
+            let quiet = capture_piece.is_none() && mv.promotion() == Piece::None;
 
             self.push_move(pos, mv);
 
@@ -611,11 +622,20 @@ impl Searcher {
                 if quiet {
                     self.add_killer(mv, ply);
 
-                    let hist_bonus = 300 * depth - 250;
+                    let hist_bonus = compute_hist_bonus(depth);
                     self.update_history(mv, hist_bonus as i16);
 
                     for q in quiets.iter() {
                         self.update_history(*q, -hist_bonus as i16); 
+                    }
+                }
+                else if let Some(cap_piece) = capture_piece {
+                    let cap_hist_bonus = compute_hist_bonus(depth);
+                    self.update_capture_history(mv, cap_piece, cap_hist_bonus as i16);
+
+                    for &c in captures.iter() {
+                        let cap_piece = pos.is_capture(c).unwrap();
+                        self.update_capture_history(c, cap_piece, -cap_hist_bonus as i16);
                     }
                 }
 
@@ -626,6 +646,9 @@ impl Searcher {
 
             if quiet {
                 quiets.push(mv);
+            }
+            else if capture_piece.is_some() {
+                captures.push(mv);
             }
 
             move_index += 1;
@@ -777,4 +800,8 @@ fn see_capture(pos: &Position, mv: Move) -> i32 {
     else {
         panic!("only captures can be see-ed");
     }
+}
+
+fn compute_hist_bonus(depth: i32) -> i32 {
+    300 * depth - 250
 }
