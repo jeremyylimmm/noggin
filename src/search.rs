@@ -592,7 +592,7 @@ impl Searcher {
             // singular extensions
 
             if mv == hash_move && excluded_move.is_none() && can_se {
-                let singular_beta = hash_score - depth*3;
+                let singular_beta = hash_score - depth * 100;
                 let singular_depth = (depth - 1) / 2;
 
                 let singular_score = self.search(pos, singular_depth, singular_beta-1, singular_beta, Some(mv)).0;
