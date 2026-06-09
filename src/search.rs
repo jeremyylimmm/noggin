@@ -498,7 +498,7 @@ impl Searcher {
             (
                 entry.mv,
                 entry.score(ply),
-                entry.depth >= depth - 3 && (entry.kind == TTKind::Exact || entry.kind == TTKind::Lower) && entry.score(ply).abs() < MATE_SCORE - 1000
+                entry.depth >= depth - 3 && (entry.kind == TTKind::Exact || entry.kind == TTKind::Lower) && entry.score(ply).abs() < MATE_SCORE - 1000 && depth >= 7
             )
         }
         else {
