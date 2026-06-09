@@ -21,12 +21,12 @@ struct TTEntry {
     depth: i32,
 }
 
-const HASH_MOVE_SCORE:         i32 = 6_000_000;
-const PROMOTION_MOVE_SCORE:    i32 = 5_000_000;
-const GOOD_CAPTURE_MOVE_SCORE: i32 = 4_000_000;
-const KILLER_MOVE_SCORE:       i32 = 3_000_000;
-const QUIET_MOVE_SCORE:        i32 = 2_000_000;
-const BAD_CAPTURE_MOVE_SCORE:  i32 = 1_000_000;
+const HASH_MOVE_SCORE:         i32 = 60_000_000;
+const PROMOTION_MOVE_SCORE:    i32 = 50_000_000;
+const GOOD_CAPTURE_MOVE_SCORE: i32 = 40_000_000;
+const KILLER_MOVE_SCORE:       i32 = 30_000_000;
+const QUIET_MOVE_SCORE:        i32 = 20_000_000;
+const BAD_CAPTURE_MOVE_SCORE:  i32 = 10_000_000;
 
 const MAX_HISTORY: i16 = 30_000;
 
@@ -170,7 +170,8 @@ impl MovePicker {
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
             let base = if see_capture(pos, mv) < 0 {BAD_CAPTURE_MOVE_SCORE} else {GOOD_CAPTURE_MOVE_SCORE};
-            base + searcher.capture_history[mv.side().id()][mv.from()][mv.to()][capture_piece.id().unwrap()] as i32
+            let mvv = capture_piece.centipawn_value()*1000;
+            base + mvv + searcher.capture_history[mv.side().id()][mv.from()][mv.to()][capture_piece.id().unwrap()] as i32
         }
         else if mv == searcher.killers[ply][0] || mv == searcher.killers[ply][1] {
             KILLER_MOVE_SCORE
