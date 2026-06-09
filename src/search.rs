@@ -720,7 +720,8 @@ impl Searcher {
             window_centre = score;
 
             let score_str = if score.abs() > MATE_SCORE - 1000 {
-                format!("mate {}{}", if score < 0 {"-"} else {""}, MATE_SCORE - score.abs())
+                let plies = MATE_SCORE - score.abs();
+                format!("mate {}{}", if score < 0 {"-"} else {""}, (plies+1)/2)
             }
             else {
                 format!("cp {}", score)
