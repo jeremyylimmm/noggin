@@ -133,6 +133,7 @@ pub struct Searcher {
 
     nodes: usize,
     qnodes: usize,
+    sel_depth: usize,
     tt_attempts: usize,
     tt_hits: usize,
     tt_collisions: usize,
@@ -228,6 +229,7 @@ impl Searcher {
 
             nodes: 0,
             qnodes: 0,
+            sel_depth: 0,
             tt_attempts: 0,
             tt_hits: 0,
             tt_collisions: 0,
@@ -299,6 +301,10 @@ impl Searcher {
         self.qnodes
     }
 
+    pub fn sel_depth(&self) -> usize {
+        self.sel_depth
+    }
+
     pub fn elapsed(&self) -> f32 {
         (std::time::Instant::now() - self.start_time).as_secs_f32()
     }
@@ -334,6 +340,7 @@ impl Searcher {
 
         self.nodes = 0;
         self.qnodes = 0;
+        self.sel_depth = 0;
         self.tt_attempts = 0;
         self.tt_hits = 0;
         self.tt_collisions = 0;
@@ -346,6 +353,7 @@ impl Searcher {
         }
 
         let ply = self.ss.len();
+        self.sel_depth = self.sel_depth.max(ply);
 
         self.qnodes += 1;
 
@@ -457,12 +465,13 @@ impl Searcher {
     }
 
 
-    pub fn search(&mut self, pos: &mut Position, depth: i32, mut alpha: i32, beta: i32) -> (i32, Move) {
+    pub fn search(&mut self, pos: &mut Position, depth: i32, mut alpha: i32, beta: i32, excluded_move: Option<Move>) -> (i32, Move) {
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
 
         let ply = self.ss.len();
+        self.sel_depth = self.sel_depth.max(ply);
 
         let alpha0 = alpha;
 
@@ -479,17 +488,21 @@ impl Searcher {
             return (self.qsearch(pos, alpha, beta), NULL_MOVE);
         }
 
-        let hash_move = if let Some(entry) = self.tt_query::<true>(pos.hash) {
+        let (hash_move, hash_score, can_se) = if let Some(entry) = self.tt_query::<true>(pos.hash) {
             if entry.depth >= depth && !pv_node {
                 if let Some((score, mv)) = entry.cutoff(ply, alpha, beta) {
                     return (score, mv);
                 }
             }
 
-            entry.mv
+            (
+                entry.mv,
+                entry.score(ply),
+                entry.depth >= depth - 3 && (entry.kind == TTKind::Exact || entry.kind == TTKind::Lower) && entry.score(ply).abs() < MATE_SCORE - 1000
+            )
         }
         else {
-            NULL_MOVE
+            (NULL_MOVE, 0, false)
         };
 
         let eval = pos.relative_eval();
@@ -500,7 +513,7 @@ impl Searcher {
 
         // reverse futility pruning
 
-        let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
+        let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000 && excluded_move.is_none();
 
         if can_rfp {
             let rfp_margin = 150 * (depth - improving as i32);
@@ -514,13 +527,13 @@ impl Searcher {
 
         // null move pruning
 
-        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side) && depth > 3;
+        let can_nmp = !in_check && !pv_node && !pos.only_pawns(side) && depth > 3 && excluded_move.is_none();
         
         if can_nmp {
             let r = 2 + depth / 6;
 
             self.push_move(pos, NULL_MOVE);
-            let v = -self.search(pos, depth-1-r, -beta, -(beta-1)).0;
+            let v = -self.search(pos, depth-1-r, -beta, -(beta-1), None).0;
             self.pop_move(pos);
 
             if v >= beta {
@@ -540,6 +553,12 @@ impl Searcher {
         let mut quiets = MoveList::new();
 
         while let Some(mv) = move_picker.next() {
+            if let Some(excl) = excluded_move {
+                if excl == mv {
+                    continue;
+                }
+            }
+
             let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
 
             self.push_move(pos, mv);
@@ -549,11 +568,13 @@ impl Searcher {
                 continue
             }
 
+            let mut extensions = 0;
+
             // futility pruning
 
             let fp_margin = eval + 200 * depth;
 
-            if depth < 6 && !in_check && quiet && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 && best_score > -MATE_SCORE + 1000 {
+            if depth < 6 && !in_check && quiet && fp_margin < alpha && alpha.abs() < MATE_SCORE - 1000 && best_score > -MATE_SCORE + 1000 && excluded_move.is_none() {
                 self.pop_move(pos);
                 continue;
             }
@@ -568,20 +589,33 @@ impl Searcher {
                 lmr = (frac.round() as i32).max(0);
             }
 
+            // singular extensions
+
+            if mv == hash_move && excluded_move.is_none() && can_se {
+                let singular_beta = hash_score - depth*3;
+                let singular_depth = depth - 1 / 2;
+
+                let singular_score = self.search(pos, singular_depth, singular_beta-1, singular_beta, Some(mv)).0;
+
+                if singular_score < singular_beta {
+                    extensions += 1;
+                }
+            }
+
             // principal variation search
 
             let mut score = -INF_SCORE;
 
             if !pv_node || (move_index > 0) {
-                score = -self.search(pos, depth-1-lmr, -(alpha+1), -alpha).0;
+                score = -self.search(pos, depth-1-lmr+extensions, -(alpha+1), -alpha, None).0;
 
                 if lmr > 0 && score > alpha {
-                    score = -self.search(pos, depth-1, -(alpha+1), -alpha).0;
+                    score = -self.search(pos, depth-1+extensions, -(alpha+1), -alpha, None).0;
                 }
             }
 
             if pv_node && (move_index == 0 || score > alpha) {
-                score = -self.search(pos, depth-1, -beta, -alpha).0;
+                score = -self.search(pos, depth-1+extensions, -beta, -alpha, None).0;
             }
 
 
@@ -606,16 +640,18 @@ impl Searcher {
             if alpha >= beta {
                 self.pop_move(pos);
 
-                self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
+                if excluded_move.is_none() {
+                    self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
 
-                if quiet {
-                    self.add_killer(mv, ply);
+                    if quiet {
+                        self.add_killer(mv, ply);
 
-                    let hist_bonus = 300 * depth - 250;
-                    self.update_history(mv, hist_bonus as i16);
+                        let hist_bonus = 300 * depth - 250;
+                        self.update_history(mv, hist_bonus as i16);
 
-                    for q in quiets.iter() {
-                        self.update_history(*q, -hist_bonus as i16); 
+                        for q in quiets.iter() {
+                            self.update_history(*q, -hist_bonus as i16); 
+                        }
                     }
                 }
 
@@ -644,7 +680,9 @@ impl Searcher {
             return (0, NULL_MOVE);
         }
 
-        self.tt_set(pos.hash, best_move, if best_score > alpha0 {TTKind::Exact} else {TTKind::Upper}, best_score, ply, depth);
+        if excluded_move.is_none() {
+            self.tt_set(pos.hash, best_move, if best_score > alpha0 {TTKind::Exact} else {TTKind::Upper}, best_score, ply, depth);
+        }
 
         (best_score, best_move)
     }
@@ -673,7 +711,7 @@ impl Searcher {
                     )
                 };
 
-                let (score, mv) = self.search(pos, d, alpha, beta);
+                let (score, mv) = self.search(pos, d, alpha, beta, None);
 
                 assert!(self.ss.len() == 0);
 
