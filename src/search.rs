@@ -109,24 +109,9 @@ impl TTEntry {
     }
 }
 
-struct ContinuationTable {
-    data: [[[i16;64];6];2]
-}
-
 struct SearchEntry {
-    cont: Option<usize>,
     eval: i32,
     mv: Move,
-}
-
-impl SearchEntry {
-    fn new() -> Self {
-        Self {
-            cont: None,
-            eval: 0,
-            mv: NULL_MOVE
-        }
-    }
 }
 
 pub struct Searcher {
@@ -137,7 +122,6 @@ pub struct Searcher {
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
-    cont_hist: Box<[ContinuationTable;64*6*2]>,
 
     enable_uci: bool,
 
@@ -224,14 +208,6 @@ impl MovePicker {
 const TT_SIZE: usize = 1 << 22;
 const TT_MASK: u64 = (TT_SIZE - 1) as u64;
 
-impl ContinuationTable {
-    fn new() -> Self {
-        Self {
-            data: [[[0;_];_];_]
-        }
-    }
-}
-
 impl Searcher {
     pub fn new() -> Self {
         Self {
@@ -242,7 +218,6 @@ impl Searcher {
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
-            cont_hist: Box::new(std::array::from_fn(|_|ContinuationTable::new())),
 
             enable_uci: true,
 
@@ -742,7 +717,6 @@ impl Searcher {
     fn push_move(&mut self, pos: &mut Position, mv: Move) {
         let se = if mv == NULL_MOVE {
             let se = SearchEntry {
-                cont: None,
                 eval: pos.relative_eval(),
                 mv
             };
@@ -752,12 +726,7 @@ impl Searcher {
             se
         }
         else {
-            let side = pos.to_move.id();
-            let piece = pos.board[mv.from()].id().unwrap();
-            let to = mv.to();
-
             let se = SearchEntry {
-                cont: Some(side*(6*64)+(piece*64)+to),
                 eval: pos.relative_eval(),
                 mv
             };
