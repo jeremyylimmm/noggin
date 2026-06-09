@@ -208,14 +208,14 @@ impl MovePicker {
             let mut value = QUIET_MOVE_SCORE;
             value += searcher.history[mv.side().id()][mv.from()][mv.to()] as i32;
 
-            for i in [1] {
+            for i in [2] {
                 if ply < i {
                     continue;
                 }
 
                 if let Some(cont_idx) = searcher.ss[ply-i].cont {
                     let cont = searcher.cont_hist[mv.side().id()][cont_idx].data[piece.id().unwrap()][mv.to()] as i32; 
-                    value += cont*2;
+                    value += cont;
                 }
             }
 
@@ -670,7 +670,7 @@ impl Searcher {
                         self.update_history(*q, -hist_bonus as i16); 
                     }
 
-                    for i in [1] {
+                    for i in [2] {
                         if ply < i {
                             continue;
                         }
