@@ -346,6 +346,7 @@ fn metrics_main() {
         println!("nodes: {}", s.nodes());
         println!("qnodes: {} ({:.2}%)", s.qnodes(), s.qnodes() as f32 / s.nodes() as f32 * 100.0);
         println!("sel_depth: {}", s.sel_depth());
+        println!("ext_depth: {}", s.ext_depth());
         println!("nps: {:.2}M", s.nodes() as f32 / s.elapsed() / 1_000_000.0);
         println!("tt-hit: {:.2}%", s.tt_hit_rate() * 100.0);
         println!("tt-fill: {:.2}%", s.tt_fill() * 100.0);

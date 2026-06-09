@@ -134,6 +134,7 @@ pub struct Searcher {
     nodes: usize,
     qnodes: usize,
     sel_depth: usize,
+    ext_depth: usize,
     tt_attempts: usize,
     tt_hits: usize,
     tt_collisions: usize,
@@ -230,6 +231,7 @@ impl Searcher {
             nodes: 0,
             qnodes: 0,
             sel_depth: 0,
+            ext_depth: 0,
             tt_attempts: 0,
             tt_hits: 0,
             tt_collisions: 0,
@@ -305,6 +307,10 @@ impl Searcher {
         self.sel_depth
     }
 
+    pub fn ext_depth(&self) -> usize {
+        self.ext_depth
+    }
+
     pub fn elapsed(&self) -> f32 {
         (std::time::Instant::now() - self.start_time).as_secs_f32()
     }
@@ -341,6 +347,7 @@ impl Searcher {
         self.nodes = 0;
         self.qnodes = 0;
         self.sel_depth = 0;
+        self.ext_depth = 0;
         self.tt_attempts = 0;
         self.tt_hits = 0;
         self.tt_collisions = 0;
@@ -472,6 +479,7 @@ impl Searcher {
 
         let ply = self.ss.len();
         self.sel_depth = self.sel_depth.max(ply);
+        self.ext_depth = self.ext_depth.max(ply);
 
         let alpha0 = alpha;
 
@@ -592,7 +600,7 @@ impl Searcher {
             // singular extensions
 
             if mv == hash_move && excluded_move.is_none() && can_se {
-                let singular_beta = hash_score - depth * 100;
+                let singular_beta = hash_score - depth * 10;
                 let singular_depth = (depth - 1) / 2;
 
                 let singular_score = self.search(pos, singular_depth, singular_beta-1, singular_beta, Some(mv)).0;
@@ -746,7 +754,7 @@ impl Searcher {
             best_move = mv;
 
             if self.enable_uci {
-                println!("info depth {} score {} nodes {} nps {} time {} pv {}", d, score_str, self.nodes, nps, time, best_move.uci_string());
+                println!("info depth {} seldepth {} score {} nodes {} nps {} time {} pv {}", d, self.sel_depth, score_str, self.nodes, nps, time, best_move.uci_string());
             }
         }
         best_move
