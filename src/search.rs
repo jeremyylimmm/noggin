@@ -643,7 +643,7 @@ impl Searcher {
                     }
 
                     for i in CONT_HISTORY_PLIES {
-                        if ply < 1 {
+                        if ply < i {
                             continue;
                         }
 
