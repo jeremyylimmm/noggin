@@ -254,7 +254,7 @@ impl Searcher {
     fn update_history(&mut self, mv: Move, bonus: i16) {
         let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
         let x = &mut self.history[mv.side().id()][mv.from()][mv.to()];
-        *x += clamped - *x * clamped.abs() / MAX_HISTORY;
+        *x += clamped - ((*x as i32 * clamped.abs() as i32) / MAX_HISTORY as i32) as i16;
     }
 
     fn tt_query<const METRICS: bool>(&mut self, hash: u64) -> Option<TTEntry> {
