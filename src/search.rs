@@ -21,6 +21,8 @@ struct TTEntry {
     depth: i32,
 }
 
+const CONT_HISTORY_PLIES: [usize;1] = [1];
+
 const HASH_MOVE_SCORE:         i32 = 6_000_000;
 const PROMOTION_MOVE_SCORE:    i32 = 5_000_000;
 const GOOD_CAPTURE_MOVE_SCORE: i32 = 4_000_000;
@@ -110,8 +112,13 @@ impl TTEntry {
 }
 
 struct SearchEntry {
+    cont: Option<usize>,
     eval: i32,
     mv: Move,
+}
+
+struct ContinuationTable {
+    data: [[i16;64];6]
 }
 
 pub struct Searcher {
@@ -122,6 +129,7 @@ pub struct Searcher {
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
+    cont_hist: Box<[[ContinuationTable; 64*6]; 2]>,
 
     enable_uci: bool,
 
@@ -161,6 +169,8 @@ impl MovePicker {
     }
 
     fn score_move(searcher: &Searcher, pos: &Position, mv: Move, hash_move: Move, ply: usize) -> i32 {
+        let piece = pos.board[mv.from()];
+
         if mv == hash_move {
             HASH_MOVE_SCORE
         }
@@ -168,7 +178,6 @@ impl MovePicker {
             PROMOTION_MOVE_SCORE + mv.promotion().centipawn_value()
         }
         else if let Some(capture_piece) = pos.is_capture(mv) {
-            let piece = pos.board[mv.from()];
             let base = if see_capture(pos, mv) < 0 {BAD_CAPTURE_MOVE_SCORE} else {GOOD_CAPTURE_MOVE_SCORE};
             base + capture_piece.centipawn_value()*100 - piece.centipawn_value()
         }
@@ -176,7 +185,21 @@ impl MovePicker {
             KILLER_MOVE_SCORE
         }
         else {
-            QUIET_MOVE_SCORE + searcher.history[mv.side().id()][mv.from()][mv.to()] as i32
+            let mut value = QUIET_MOVE_SCORE + searcher.history[mv.side().id()][mv.from()][mv.to()] as i32;
+
+            for i in CONT_HISTORY_PLIES {
+                if ply < i {
+                    continue;
+                }
+
+                let cont = searcher.ss[ply-i].cont;
+                if cont.is_none() {continue;}
+                let cont = cont.unwrap();
+
+                value += searcher.cont_hist[mv.side().id()][cont].data[piece.id().unwrap()][mv.to()] as i32;
+            }
+
+            value
         }
     }
 
@@ -218,6 +241,7 @@ impl Searcher {
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
+            cont_hist: Box::new(std::array::from_fn(|_|std::array::from_fn(|_|ContinuationTable::new()))),
 
             enable_uci: true,
 
@@ -617,6 +641,22 @@ impl Searcher {
                     for q in quiets.iter() {
                         self.update_history(*q, -hist_bonus as i16); 
                     }
+
+                    for i in CONT_HISTORY_PLIES {
+                        if ply < 1 {
+                            continue;
+                        }
+
+                        let cont = self.ss[ply-i].cont;
+                        if cont.is_none() {continue;}
+                        let cont = cont.unwrap();
+
+                        self.cont_hist[side.id()][cont].update(pos, mv, hist_bonus as i16);
+
+                        for &q in quiets.iter() {
+                            self.cont_hist[side.id()][cont].update(pos, q, -hist_bonus as i16);
+                        }
+                    }
                 }
 
                 return (best_score, best_move);
@@ -717,6 +757,7 @@ impl Searcher {
     fn push_move(&mut self, pos: &mut Position, mv: Move) {
         let se = if mv == NULL_MOVE {
             let se = SearchEntry {
+                cont: None,
                 eval: pos.relative_eval(),
                 mv
             };
@@ -726,7 +767,11 @@ impl Searcher {
             se
         }
         else {
+            let piece = pos.board[mv.from()].id().unwrap();
+            let to = mv.to();
+
             let se = SearchEntry {
+                cont: Some(piece*64+to),
                 eval: pos.relative_eval(),
                 mv
             };
@@ -776,5 +821,22 @@ fn see_capture(pos: &Position, mv: Move) -> i32 {
     }
     else {
         panic!("only captures can be see-ed");
+    }
+}
+
+impl ContinuationTable {
+    fn new() -> Self {
+        Self {
+            data: [[0; 64];6]
+        }
+    }
+
+    fn update(&mut self, pos: &Position, mv: Move, bonus: i16) {
+        let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
+
+        let piece = pos.board[mv.from()];
+        let x = &mut self.data[piece.id().unwrap()][mv.to()];
+
+        *x += clamped - ((*x as i32 * clamped.abs() as i32) / MAX_HISTORY as i32) as i16;
     }
 }
