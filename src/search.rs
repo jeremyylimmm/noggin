@@ -21,14 +21,14 @@ struct TTEntry {
     depth: i32,
 }
 
-const CONT_HISTORY_PLIES: [usize;1] = [1];
+const CONT_HISTORY_PLIES: [usize;2] = [1, 2];
 
-const HASH_MOVE_SCORE:         i32 = 6_000_000;
-const PROMOTION_MOVE_SCORE:    i32 = 5_000_000;
-const GOOD_CAPTURE_MOVE_SCORE: i32 = 4_000_000;
-const KILLER_MOVE_SCORE:       i32 = 3_000_000;
-const QUIET_MOVE_SCORE:        i32 = 2_000_000;
-const BAD_CAPTURE_MOVE_SCORE:  i32 = 1_000_000;
+const HASH_MOVE_SCORE:         i32 = 60_000_000;
+const PROMOTION_MOVE_SCORE:    i32 = 50_000_000;
+const GOOD_CAPTURE_MOVE_SCORE: i32 = 40_000_000;
+const KILLER_MOVE_SCORE:       i32 = 30_000_000;
+const QUIET_MOVE_SCORE:        i32 = 20_000_000;
+const BAD_CAPTURE_MOVE_SCORE:  i32 = 10_000_000;
 
 const MAX_HISTORY: i16 = 30_000;
 
