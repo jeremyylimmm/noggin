@@ -6,6 +6,7 @@ mod searchtests;
 mod pesto;
 mod generated;
 
+pub mod pcg;
 pub mod search;
 pub mod movegen;
 
@@ -75,7 +76,7 @@ pub enum Side {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
-pub struct Move(u16);
+pub struct Move(pub u16);
 
 pub const NULL_MOVE: Move = Move(0);
 
@@ -159,6 +160,13 @@ impl Piece {
             Piece::King => 0,
         }
     }
+}
+
+pub enum GameResult {
+    FiftyMove,
+    Stalemate,
+    TheefoldRepetition,
+    Checkmate(Side)
 }
 
 const WQ_CASTLE: u8 = 1 << 0;
@@ -431,6 +439,43 @@ impl Position {
         pos.hash = pos.compute_hash();
 
         Ok(pos)
+    }
+
+    pub fn filter_legal(&mut self, moves: &mut movegen::MoveList) {
+        let side = self.to_move;
+
+        for i in (0..moves.len()).rev() {
+            let mv = moves[i];
+            self.make_move(mv);
+            if self.checked(side) {
+                moves.swap_remove(i);
+            }
+            self.unmake_move();
+        }
+    }
+
+    pub fn game_over(&mut self, legal_moves: &movegen::MoveList) -> Option<GameResult> {
+        if self.halfmove_clock == 100 {
+            return Some(GameResult::FiftyMove);
+        }
+
+        if self.is_threefold_repetition() {
+            return Some(GameResult::TheefoldRepetition);
+        }
+
+        if legal_moves.len() == 0 {
+            return Some(
+                if self.checked(self.to_move) {
+                    GameResult::Checkmate(self.to_move.opp())
+                }
+                else {
+                    GameResult::Stalemate
+                }
+            )
+        }
+        else {
+            None
+        }
     }
 
     pub fn checked(&self, side: Side) -> bool {
