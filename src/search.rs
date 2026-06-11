@@ -118,7 +118,7 @@ struct SearchEntry {
 }
 
 struct ContinuationTable {
-    data: [[i16;64];6]
+    data: [[[i16;64];6];2]
 }
 
 pub struct Searcher {
@@ -129,7 +129,7 @@ pub struct Searcher {
     history: Box<[[[i16; 64]; 64];2]>,
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
-    cont_hist: Box<[[ContinuationTable; 64*6]; 2]>,
+    cont_hist: Box<[ContinuationTable; 64*6*2]>,
 
     enable_uci: bool,
 
@@ -196,7 +196,7 @@ impl MovePicker {
                 if cont.is_none() {continue;}
                 let cont = cont.unwrap();
 
-                value += searcher.cont_hist[mv.side().id()][cont].data[piece.id().unwrap()][mv.to()] as i32;
+                value += searcher.cont_hist[cont].data[mv.side().id()][piece.id().unwrap()][mv.to()] as i32;
             }
 
             value
@@ -241,7 +241,7 @@ impl Searcher {
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
-            cont_hist: Box::new(std::array::from_fn(|_|std::array::from_fn(|_|ContinuationTable::new()))),
+            cont_hist: Box::new(std::array::from_fn(|_|ContinuationTable::new())),
 
             enable_uci: true,
 
@@ -651,10 +651,10 @@ impl Searcher {
                         if cont.is_none() {continue;}
                         let cont = cont.unwrap();
 
-                        self.cont_hist[side.id()][cont].update(pos, mv, hist_bonus as i16);
+                        self.cont_hist[cont].update(pos, mv, hist_bonus as i16);
 
                         for &q in quiets.iter() {
-                            self.cont_hist[side.id()][cont].update(pos, q, -hist_bonus as i16);
+                            self.cont_hist[cont].update(pos, q, -hist_bonus as i16);
                         }
                     }
                 }
@@ -769,9 +769,10 @@ impl Searcher {
         else {
             let piece = pos.board[mv.from()].id().unwrap();
             let to = mv.to();
+            let side = mv.side().id();
 
             let se = SearchEntry {
-                cont: Some(piece*64+to),
+                cont: Some(side*6*64+piece*64+to),
                 eval: pos.relative_eval(),
                 mv
             };
@@ -827,7 +828,7 @@ fn see_capture(pos: &Position, mv: Move) -> i32 {
 impl ContinuationTable {
     fn new() -> Self {
         Self {
-            data: [[0; 64];6]
+            data: [[[0; 64];6];2]
         }
     }
 
@@ -835,7 +836,7 @@ impl ContinuationTable {
         let clamped = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
 
         let piece = pos.board[mv.from()];
-        let x = &mut self.data[piece.id().unwrap()][mv.to()];
+        let x = &mut self.data[mv.side().id()][piece.id().unwrap()][mv.to()];
 
         *x += clamped - ((*x as i32 * clamped.abs() as i32) / MAX_HISTORY as i32) as i16;
     }
