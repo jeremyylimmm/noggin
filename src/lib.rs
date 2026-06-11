@@ -54,7 +54,7 @@ impl Side {
         }
     }
 
-    fn sign(&self) -> i32 {
+    pub fn sign(&self) -> i32 {
         match self {
             Side::White => 1,
             Side::Black => -1

@@ -1,6 +1,3 @@
-
-use core::{f32, time};
-
 use noggin::*;
 use noggin::search::*;
 
@@ -373,7 +370,7 @@ fn get_timestamp() -> std::time::Duration {
     timestamp
 } 
 
-fn attempt_datagen_match() -> Option<Match> {
+fn attempt_datagen_match(seed_mix: u64) -> Option<Match> {
     let mut pos = Position::from_fen(STARTING_FEN).unwrap();
 
     const RANDOM_PLIES: usize = 10; 
@@ -382,7 +379,7 @@ fn attempt_datagen_match() -> Option<Match> {
     let mut moves = vec![];
     let mut scores = vec![];
 
-    let mut rng = PCG32::new(get_timestamp().as_nanos() as u64, 3);
+    let mut rng = PCG32::new(get_timestamp().as_nanos() as u64 ^ seed_mix.wrapping_mul(6364136223846793005), seed_mix*2+3);
 
     let mut searcher = Searcher::new();
     searcher.disable_uci();
@@ -417,7 +414,7 @@ fn attempt_datagen_match() -> Option<Match> {
 
             let (mv, score) = searcher.best(&mut pos, 50, 1e6, 1e6, 1_000_000_000, 5_000);
             moves.push(mv.0);
-            scores.push(score.try_into().unwrap());
+            scores.push((pos.to_move.sign() * score).try_into().unwrap());
 
             pos.make_move(mv);
         }
@@ -426,46 +423,85 @@ fn attempt_datagen_match() -> Option<Match> {
     None
 }
 
-fn run_datagen_match() -> Match {
-    loop {
-        if let Some(m) = attempt_datagen_match() {
-            return m;
+fn run_datagen_match(index: usize, file: &std::sync::Mutex<std::fs::File>) -> i32 {
+    let m = loop {
+        if let Some(m) = attempt_datagen_match(index as u64) {
+            break m;
         }
-    }
+    };
+
+    let result_str = match m.result {
+        GameResult::Checkmate(Side::White) => "White mates",
+        GameResult::Checkmate(Side::Black) => "Black mates",
+        GameResult::Stalemate => "Draw by stalemate",
+        GameResult::TheefoldRepetition => "Draw by threefold-repetition",
+        GameResult::FiftyMove => "Draw by 50-move rule",
+    };
+
+    println!("Game {} ended in {} moves - {}", index, m.moves.len(), result_str);
+
+    let wdl = match m.result {
+        GameResult::Checkmate(Side::White) => 1,
+        GameResult::Checkmate(Side::Black) => -1,
+        _ => 0
+    };
+
+    m.write(file);
+
+    wdl
 }
 
 fn datagen_main() {
     use std::io::Write;
+    use rayon::prelude::*;
 
     let mut file = std::fs::File::create(format!("data/data_{}.bin", get_timestamp().as_secs())).unwrap();
 
     let magic = 0x67676767u32.to_le_bytes();
     file.write_all(&magic).unwrap();
 
-    const MATCHES_PER_SHARD: usize = 100;
+    let file = std::sync::Mutex::new(file);
 
-    let mut wdl_sum = 0;
+    const MATCHES_PER_SHARD: usize = 1000;
 
-    for match_index in 0..MATCHES_PER_SHARD {
-        let m = run_datagen_match();
-        let result_string = match m.result {
-            GameResult::Checkmate(Side::White) => "White mates",
-            GameResult::Checkmate(Side::Black) => "Black mates",
-            GameResult::FiftyMove => "Draw by 50 move rule",
-            GameResult::Stalemate => "Draw by stalemate",
-            GameResult::TheefoldRepetition => "Draw by threefold-repetition",
-        };
-
-        println!("Match {} ended ({} moves) - {}", match_index, m.moves.len(), result_string);
-
-        let wdl = match m.result {
-            GameResult::Checkmate(Side::White) => 1,
-            GameResult::Checkmate(Side::Black) => -1,
-            _ => 0
-        };
-
-        wdl_sum += wdl;
-    }
-
+    let wdl_sum = (0..MATCHES_PER_SHARD).into_par_iter().map(|i|run_datagen_match(i, &file)).sum::<i32>();
     println!("wdl_average: {}", wdl_sum as f32 / MATCHES_PER_SHARD as f32);
+}
+
+impl Match {
+    fn write(&self, file: &std::sync::Mutex<std::fs::File>) {
+        use std::io::Write;
+
+        let mut f = file.lock().unwrap();
+
+        let magic = [0x67];
+        f.write_all(&magic).unwrap();
+
+
+        let wdl = match self.result {
+            GameResult::Checkmate(Side::White) => 1i8,
+            GameResult::Checkmate(Side::Black) => -1i8,
+            _ => 0i8
+        }.to_le_bytes();
+
+        f.write_all(&wdl).unwrap();
+
+        let count: u16 = self.moves.len().try_into().unwrap();
+        let count = count.to_le_bytes();
+        f.write_all(&count).unwrap();
+
+        let start: Vec<u8> = self.start.iter().map(|x|x.to_le_bytes()).flatten().collect();
+        let end: Vec<u8> = self.end.iter().map(|x|x.to_le_bytes()).flatten().collect();
+
+        f.write_all(&start).unwrap();
+        f.write_all(&end).unwrap();
+
+        let moves: Vec<u8> = self.moves.iter().map(|x|x.to_le_bytes()).flatten().collect();
+
+        f.write_all(&moves).unwrap();
+
+        let scores: Vec<u8> = self.scores.iter().map(|x|x.to_le_bytes()).flatten().collect();
+
+        f.write_all(&scores).unwrap();
+    }
 }
