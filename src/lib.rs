@@ -61,7 +61,7 @@ impl Side {
         }
     }
 
-    fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         match self {
             Side::White => 0,
             Side::Black => 1
@@ -87,19 +87,19 @@ impl Move {
         )
     }
 
-    fn from(&self) -> usize {
+    pub fn from(&self) -> usize {
         (self.0 & 0b111111) as usize
     }
 
-    fn to(&self) -> usize {
+    pub fn to(&self) -> usize {
         ((self.0 >> 6) & 0b111111) as usize
     }
 
-    fn side(&self) -> Side {
+    pub fn side(&self) -> Side {
         Side::from_id(((self.0 >> 15) & 1) as usize).unwrap()
     }
 
-    fn promotion(&self) -> Piece {
+    pub fn promotion(&self) -> Piece {
         let x = (self.0 >> 12) & 0b111;
 
         match x {
@@ -169,10 +169,10 @@ pub enum GameResult {
     Checkmate(Side)
 }
 
-const WQ_CASTLE: u8 = 1 << 0;
-const WK_CASTLE: u8 = 1 << 1;
-const BQ_CASTLE: u8 = 1 << 2;
-const BK_CASTLE: u8 = 1 << 3;
+pub const WQ_CASTLE: u8 = 1 << 0;
+pub const WK_CASTLE: u8 = 1 << 1;
+pub const BQ_CASTLE: u8 = 1 << 2;
+pub const BK_CASTLE: u8 = 1 << 3;
 
 #[derive(Clone, PartialEq, Debug)]
 struct Undo {
@@ -583,7 +583,7 @@ impl Position {
         println!("Fullmoves: {}", self.fullmoves);
     }
 
-    fn eval(&self) -> i32 {
+    pub fn eval(&self) -> i32 {
         self.pesto_incr.get()
     }
 
@@ -1195,7 +1195,7 @@ pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
 }
 
 
-fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
+pub fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
     let (from_rank, from_file) = rank_and_file(mv.from());
     let (_, to_file) = rank_and_file(mv.to());
 
@@ -1261,7 +1261,7 @@ pub fn benchmark_perft() {
     println!("");
 }
 
-fn rank_and_file(sq: usize) -> (usize, usize) {
+pub fn rank_and_file(sq: usize) -> (usize, usize) {
     (
         (sq >> 3) & 7,
         sq & 7

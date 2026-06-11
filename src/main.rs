@@ -3,6 +3,8 @@ use noggin::search::*;
 
 use noggin::pcg::PCG32;
 
+mod viri;
+
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 fn is_legal(pos: &mut Position, mv: Move) -> bool {
@@ -353,14 +355,6 @@ fn metrics_main() {
     }
 }
 
-struct Match {
-    start: [u64;12],
-    end: [u64;12],
-    moves: Vec<u16>,
-    scores: Vec<i16>,
-    result: GameResult
-}
-
 fn get_timestamp() -> std::time::Duration {
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -370,35 +364,46 @@ fn get_timestamp() -> std::time::Duration {
     timestamp
 } 
 
-fn attempt_datagen_match(seed_mix: u64) -> Option<Match> {
+fn attempt_datagen_match(match_index: usize) -> Option<viri::Game> {
     let mut pos = Position::from_fen(STARTING_FEN).unwrap();
 
-    const RANDOM_PLIES: usize = 10; 
-
-    let mut start = [0;12];
-    let mut moves = vec![];
-    let mut scores = vec![];
-
+    let seed_mix = match_index as u64;
     let mut rng = PCG32::new(get_timestamp().as_nanos() as u64 ^ seed_mix.wrapping_mul(6364136223846793005), seed_mix*2+3);
 
     let mut searcher = Searcher::new();
     searcher.disable_uci();
+
+    let mut seq = vec![];
+    let mut starting_pos = None;
+
+    const RANDOM_PLIES: usize = 10; 
 
     for ply in 0..10000 {
         let mut legal_moves = movegen::gen_pseudolegal_moves(&pos);
         pos.filter_legal(&mut legal_moves);
 
         if let Some(result) = pos.game_over(&legal_moves) {
-            if moves.len() == 0 {
-                return None;
-            }
+            let start = starting_pos?;
 
-            return Some(Match{
-                start,
-                end: pos.bb,
-                moves,
-                scores,
-                result
+            let result_str = match result {
+                GameResult::Checkmate(Side::White) => "White mates",
+                GameResult::Checkmate(Side::Black) => "Black mates",
+                GameResult::Stalemate => "Draw by stalemate",
+                GameResult::TheefoldRepetition => "Draw by threefold-repetition",
+                GameResult::FiftyMove => "Draw by 50-move rule",
+            };
+
+            println!("Game {} ended in {} moves - {}", match_index, seq.len(), result_str);
+
+            let wdl = match result {
+                GameResult::Checkmate(Side::Black) => 0,
+                GameResult::Checkmate(Side::White) => 2,
+                _ => 1
+            };
+
+            return Some(viri::Game{
+                board: viri::PackedBoard::from_position(&start, wdl),
+                seq
             });
         }
 
@@ -409,12 +414,15 @@ fn attempt_datagen_match(seed_mix: u64) -> Option<Match> {
         }
         else {
             if ply == RANDOM_PLIES {
-                start = pos.bb;
+                starting_pos = Some(pos.clone());
             }
 
             let (mv, score) = searcher.best(&mut pos, 50, 1e6, 1e6, 1_000_000_000, 5_000);
-            moves.push(mv.0);
-            scores.push((pos.to_move.sign() * score).try_into().unwrap());
+
+            let vmv = viri::Move::from_native(&pos, mv);
+            let score = (pos.to_move.sign() * score).try_into().unwrap();
+
+            seq.push((vmv, score));
 
             pos.make_move(mv);
         }
@@ -423,85 +431,29 @@ fn attempt_datagen_match(seed_mix: u64) -> Option<Match> {
     None
 }
 
-fn run_datagen_match(index: usize, file: &std::sync::Mutex<std::fs::File>) -> i32 {
+fn run_datagen_match(index: usize, file: &std::sync::Mutex<std::fs::File>) {
     let m = loop {
-        if let Some(m) = attempt_datagen_match(index as u64) {
+        if let Some(m) = attempt_datagen_match(index) {
             break m;
         }
     };
 
-    let result_str = match m.result {
-        GameResult::Checkmate(Side::White) => "White mates",
-        GameResult::Checkmate(Side::Black) => "Black mates",
-        GameResult::Stalemate => "Draw by stalemate",
-        GameResult::TheefoldRepetition => "Draw by threefold-repetition",
-        GameResult::FiftyMove => "Draw by 50-move rule",
-    };
+    let mut f = file.lock().unwrap();
 
-    println!("Game {} ended in {} moves - {}", index, m.moves.len(), result_str);
-
-    let wdl = match m.result {
-        GameResult::Checkmate(Side::White) => 1,
-        GameResult::Checkmate(Side::Black) => -1,
-        _ => 0
-    };
-
-    m.write(file);
-
-    wdl
+    m.dump(&mut f);
 }
 
 fn datagen_main() {
-    use std::io::Write;
     use rayon::prelude::*;
 
-    let mut file = std::fs::File::create(format!("data/data_{}.bin", get_timestamp().as_secs())).unwrap();
+    loop {
+        let file = std::fs::File::create(format!("data/data_{}.bin", get_timestamp().as_secs())).unwrap();
+        let file = std::sync::Mutex::new(file);
 
-    let magic = 0x67676767u32.to_le_bytes();
-    file.write_all(&magic).unwrap();
+        const MATCHES_PER_SHARD: usize = 1000;
 
-    let file = std::sync::Mutex::new(file);
+        (0..MATCHES_PER_SHARD).into_par_iter().for_each(|i|run_datagen_match(i, &file));
 
-    const MATCHES_PER_SHARD: usize = 1000;
-
-    let wdl_sum = (0..MATCHES_PER_SHARD).into_par_iter().map(|i|run_datagen_match(i, &file)).sum::<i32>();
-    println!("wdl_average: {}", wdl_sum as f32 / MATCHES_PER_SHARD as f32);
-}
-
-impl Match {
-    fn write(&self, file: &std::sync::Mutex<std::fs::File>) {
-        use std::io::Write;
-
-        let mut f = file.lock().unwrap();
-
-        let magic = [0x67];
-        f.write_all(&magic).unwrap();
-
-
-        let wdl = match self.result {
-            GameResult::Checkmate(Side::White) => 1i8,
-            GameResult::Checkmate(Side::Black) => -1i8,
-            _ => 0i8
-        }.to_le_bytes();
-
-        f.write_all(&wdl).unwrap();
-
-        let count: u16 = self.moves.len().try_into().unwrap();
-        let count = count.to_le_bytes();
-        f.write_all(&count).unwrap();
-
-        let start: Vec<u8> = self.start.iter().map(|x|x.to_le_bytes()).flatten().collect();
-        let end: Vec<u8> = self.end.iter().map(|x|x.to_le_bytes()).flatten().collect();
-
-        f.write_all(&start).unwrap();
-        f.write_all(&end).unwrap();
-
-        let moves: Vec<u8> = self.moves.iter().map(|x|x.to_le_bytes()).flatten().collect();
-
-        f.write_all(&moves).unwrap();
-
-        let scores: Vec<u8> = self.scores.iter().map(|x|x.to_le_bytes()).flatten().collect();
-
-        f.write_all(&scores).unwrap();
+        break;
     }
 }
