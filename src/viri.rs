@@ -111,7 +111,7 @@ impl PackedBoard {
                 noggin::Piece::Pawn => Some(0),
                 noggin::Piece::Knight => Some(1),
                 noggin::Piece::Bishop => Some(2),
-                noggin::Piece::Rook => Some(match (pos.to_move, sq, can_qcastle, can_kcastle) {
+                noggin::Piece::Rook => Some(match (side, sq, can_qcastle, can_kcastle) {
                     (noggin::Side::White, 0, true, _) => 6,
                     (noggin::Side::White, 7, _, true) => 6,
                     (noggin::Side::Black, 56, true, _) => 6,
