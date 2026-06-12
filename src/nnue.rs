@@ -80,7 +80,7 @@ fn compute_y0_half(bb: &[u64], y0_half: &mut [i32], side: Side) {
 
 pub fn forward(y0: &[i32;HL0_SIZE]) -> i32 {
     let a0: [i32;HL0_SIZE] = std::array::from_fn(|i|{
-        screlu(y0[i] + B0[i%(HL0_SIZE/2)] as i32)
+        screlu(y0[i] + B0[i%(HL0_SIZE/2)] as i32) / QA as i32
     });
 
     let mut a1: [i32;1] = [0;_];
@@ -91,7 +91,6 @@ pub fn forward(y0: &[i32;HL0_SIZE]) -> i32 {
         }
     }
 
-    a1[0] /= QA as i32;
     a1[0] += B1[0] as i32;
     a1[0] *= 400;
     a1[0] /= QA as i32 * QB as i32;
