@@ -17,10 +17,10 @@ const QA: isize = 255;
 const QB: isize = 64;
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Accumulator([i32;HL0_SIZE]);
+pub struct Accumulator([i16;HL0_SIZE]);
 
 impl Accumulator {
-    pub fn piece<const SIGN: i32>(&mut self, piece: Piece, sq: usize, side: Side) {
+    pub fn piece<const SIGN: i16>(&mut self, piece: Piece, sq: usize, side: Side) {
         let p_white = piece.id().unwrap()+side.id()*6;
         let p_black = (p_white + 6) % 12;
 
@@ -31,8 +31,8 @@ impl Accumulator {
         let feature_black = p_black*64+sq_black;
 
         for j in 0..HL0_SIZE/2 {
-            self.0[j] += SIGN * W0[feature_white][j] as i32;
-            self.0[j+HL0_SIZE/2] += SIGN * W0[feature_black][j] as i32;
+            self.0[j] += SIGN * W0[feature_white][j];
+            self.0[j+HL0_SIZE/2] += SIGN * W0[feature_black][j];
         }
     }
 
@@ -52,12 +52,12 @@ impl Accumulator {
     }
 }
 
-fn screlu(x: i32) -> i32 {
+fn screlu(x: i16) -> i32 {
     let y = x.clamp(0, QA as _);
     (y as i32)*(y as i32)
 }
 
-fn compute_y0_half(bb: &[u64], y0_half: &mut [i32], side: Side) {
+fn compute_y0_half(bb: &[u64], y0_half: &mut [i16], side: Side) {
     for p in 0..12 {
         let mut x = bb[p];
 
@@ -70,7 +70,7 @@ fn compute_y0_half(bb: &[u64], y0_half: &mut [i32], side: Side) {
             let i = p_index*64+sq_index;
 
             for j in 0..y0_half.len() {
-                y0_half[j] += W0[i][j] as i32;
+                y0_half[j] += W0[i][j];
             }
 
             x &= x-1;
@@ -78,9 +78,9 @@ fn compute_y0_half(bb: &[u64], y0_half: &mut [i32], side: Side) {
     }
 } 
 
-pub fn forward(y0: &[i32;HL0_SIZE]) -> i32 {
+pub fn forward(y0: &[i16;HL0_SIZE]) -> i32 {
     let a0: [i32;HL0_SIZE] = std::array::from_fn(|i|{
-        screlu(y0[i] + B0[i%(HL0_SIZE/2)] as i32) 
+        screlu(y0[i] + B0[i%(HL0_SIZE/2)]) 
     });
 
     let mut a1: [i32;1] = [0;_];
