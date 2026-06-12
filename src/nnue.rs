@@ -3,11 +3,9 @@ use crate::*;
 const INPUT_SIZE: usize = 768;
 const HL0_SIZE: usize = 128; 
 
-type Accumulator = [f32;HL0_SIZE];
-
 type TypeW0 = [[f32;HL0_SIZE/2];INPUT_SIZE];
 type TypeB0 = [f32;HL0_SIZE/2];
-type TypeW1 = [[f32;HL0_SIZE];1];
+type TypeW1 = [[f32;1];HL0_SIZE];
 type TypeB1 = [f32;1];
 
 const W0: TypeW0 = load_model().0;
@@ -52,7 +50,7 @@ pub fn compute(bb: &[u64]) -> f32 {
     let mut a1 = B1;
     for j in 0..a1.len() {
         for i in 0..a0.len() {
-            a1[j] += W1[j][i] * a0[i];
+            a1[j] += W1[i][j] * a0[i];
         }
     }
 
@@ -73,12 +71,9 @@ const unsafe fn read_object<T>(x: &mut T, buffer: &[u8], cursor: &mut usize) {
     *cursor += required;
 }
 
-#[repr(align(4))]
-struct AlignedBytes<const N: usize>([u8; N]);
-
 const fn load_model() -> (TypeW0, TypeB0, TypeW1, TypeB1) {
     // 2. Load your file into the wrapper
-    let raw = include_bytes!("../model.nnue");
+    let raw = include_bytes!("../raw.bin");
 
     let mut w0 = std::mem::MaybeUninit::uninit();
     let mut b0 = std::mem::MaybeUninit::uninit();
