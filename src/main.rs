@@ -450,10 +450,8 @@ fn datagen_main() {
         let file = std::fs::File::create(format!("data/data_{}.bin", get_timestamp().as_secs())).unwrap();
         let file = std::sync::Mutex::new(file);
 
-        const MATCHES_PER_SHARD: usize = 1000;
+        const MATCHES_PER_SHARD: usize = 10000;
 
         (0..MATCHES_PER_SHARD).into_par_iter().for_each(|i|run_datagen_match(i, &file));
-
-        break;
     }
 }
