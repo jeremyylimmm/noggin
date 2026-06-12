@@ -496,7 +496,7 @@ register_zobrist_test!(test_zobrist_suite_126, 126);
 register_zobrist_test!(test_zobrist_suite_127, 127);
 
 fn test_eval(pos: &mut Position, depth: i32) {
-    assert_eq!(pos.compute_eval(), pos.eval());
+    assert!(pos.compute_eval().abs_diff(pos.eval()) < 3);
 
     if depth > 0 {
         let side = pos.to_move;

@@ -189,6 +189,7 @@ pub struct Position {
     pub halfmove_clock: usize,
     pub fullmoves: usize,
     pub hash: u64,
+    acc: Vec<nnue::Accumulator>,
     undos: Vec<Undo>
 }
 
@@ -420,6 +421,7 @@ impl Position {
             halfmove_clock,
             fullmoves,
             hash: 0,
+            acc: vec![nnue::Accumulator::new(&bb)],
             undos: vec![]
         };
 
@@ -534,12 +536,12 @@ impl Position {
     }
 
     fn eval(&self) -> i32 {
-        self.compute_eval()
+        self.acc.last().unwrap().forward()
     }
 
     #[allow(unused)]
     fn compute_eval(&self) -> i32 {
-        nnue::compute(&self.bb).round() as i32
+        nnue::compute(&self.bb)
     }
 
     fn relative_eval(&self) -> i32 {
@@ -558,6 +560,8 @@ impl Position {
             fullmoves: self.fullmoves,
             hash: self.hash
         };
+
+        let mut acc = self.acc.last().unwrap().clone();
 
         let from = mv.from();
         let to = mv.to();
@@ -591,7 +595,7 @@ impl Position {
         self.bb[start.bb_index(self.to_move).unwrap()] ^= 1u64 << from;
         self.hash ^= zobrist::PIECE[start.bb_index(self.to_move).unwrap()][from];
 
-
+        acc.piece::<-1>(start, from, self.to_move);
 
 
         // remove captured piece
@@ -608,6 +612,8 @@ impl Position {
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
             self.board[capture_sq] = Piece::None;
             self.hash ^= zobrist::PIECE[capture_piece.bb_index(self.to_move.opp()).unwrap()][capture_sq];
+
+            acc.piece::<-1>(capture_piece, capture_sq, self.to_move.opp());
         }
 
 
@@ -620,6 +626,7 @@ impl Position {
         self.bb[end.bb_index(self.to_move).unwrap()] ^= 1u64 << to;
         self.hash ^= zobrist::PIECE[end.bb_index(self.to_move).unwrap()][to];
 
+        acc.piece::<1>(end, to, self.to_move);
 
         // move rook if castling
 
@@ -635,6 +642,9 @@ impl Position {
 
             self.hash ^= zobrist::PIECE[piece_id][rook_from];
             self.hash ^= zobrist::PIECE[piece_id][rook_to];
+
+            acc.piece::<-1>(Piece::Rook, rook_from, self.to_move);
+            acc.piece::< 1>(Piece::Rook, rook_to, self.to_move);
         }
 
 
@@ -743,6 +753,7 @@ impl Position {
         // push to the undo stack
 
         self.undos.push(undo);
+        self.acc.push(acc);
     }
 
     pub fn make_null_move(&mut self) {
@@ -757,6 +768,8 @@ impl Position {
             fullmoves: self.fullmoves,
             hash: self.hash
         });
+
+        self.acc.push(self.acc.last().unwrap().clone());
 
         if let Some(ep) = self.ep_sq.take() {
             self.hash ^= zobrist::EP_SQUARE[ep];
@@ -774,6 +787,7 @@ impl Position {
 
     pub fn unmake_null_move(&mut self) {
         let undo = self.undos.pop().unwrap();
+        self.acc.pop().unwrap();
 
         self.ep_sq = undo.ep_sq;
         self.castling = undo.castling;
@@ -785,6 +799,7 @@ impl Position {
 
     pub fn unmake_move(&mut self) {
         let undo = self.undos.pop().unwrap();
+        self.acc.pop().unwrap();
 
         let mv = undo.mv;
 
