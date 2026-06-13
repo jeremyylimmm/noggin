@@ -5,7 +5,7 @@ const HL0_SIZE: usize = 128;
 
 type TypeW0 = [[i16;HL0_SIZE/2];INPUT_SIZE];
 type TypeB0 = [i16;HL0_SIZE/2];
-type TypeW1 = [[i16;1];HL0_SIZE];
+type TypeW1 = [[i16;HL0_SIZE];1];
 type TypeB1 = [i16;1];
 
 const W0: TypeW0 = load_model().0;
@@ -87,7 +87,7 @@ pub fn forward(y0: &[i16;HL0_SIZE]) -> i32 {
 
     for j in 0..a1.len() {
         for i in 0..a0.len() {
-            a1[j] += (W1[i][j] as i32) * a0[i];
+            a1[j] += (W1[j][i] as i32) * a0[i];
         }
     }
 
