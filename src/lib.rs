@@ -3,12 +3,12 @@ use crate::generated::zobrist;
 #[cfg(test)]
 mod searchtests;
 
-mod pesto;
 mod generated;
+mod pesto;
 
+pub mod movegen;
 pub mod pcg;
 pub mod search;
-pub mod movegen;
 
 pub const INF_SCORE: i32 = 50_000_000;
 
@@ -22,7 +22,8 @@ pub const FILE_G: u64 = 0x4040404040404040;
 pub const FILE_H: u64 = 0x8080808080808080;
 
 pub const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-pub const KIWIPETE_FEN: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+pub const KIWIPETE_FEN: &str =
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
 
 pub const MATE_SCORE: i32 = 30_000;
 
@@ -35,7 +36,7 @@ pub enum Piece {
     Bishop,
     Rook,
     Queen,
-    King
+    King,
 }
 
 impl Side {
@@ -43,7 +44,7 @@ impl Side {
         match id {
             0 => Some(Side::White),
             1 => Some(Side::Black),
-            _ => None
+            _ => None,
         }
     }
 
@@ -57,14 +58,14 @@ impl Side {
     pub fn sign(&self) -> i32 {
         match self {
             Side::White => 1,
-            Side::Black => -1
+            Side::Black => -1,
         }
     }
 
     pub fn id(&self) -> usize {
         match self {
             Side::White => 0,
-            Side::Black => 1
+            Side::Black => 1,
         }
     }
 }
@@ -72,7 +73,7 @@ impl Side {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Side {
     White,
-    Black
+    Black,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
@@ -83,7 +84,10 @@ pub const NULL_MOVE: Move = Move(0);
 impl Move {
     pub fn new(from: usize, to: usize, promotion: Piece, side: Side) -> Self {
         Self(
-            (from & 0b111111) as u16 | ((to & 0b111111) << 6) as u16 | ((promotion as u16 & 0b111) << 12) | ((side.id() as u16) << 15)
+            (from & 0b111111) as u16
+                | ((to & 0b111111) << 6) as u16
+                | ((promotion as u16 & 0b111) << 12)
+                | ((side.id() as u16) << 15),
         )
     }
 
@@ -110,7 +114,7 @@ impl Move {
             4 => Piece::Rook,
             5 => Piece::Queen,
             6 => Piece::King,
-            _ => panic!("invalid promotion piece in move encoding")
+            _ => panic!("invalid promotion piece in move encoding"),
         }
     }
 
@@ -125,7 +129,12 @@ impl Move {
             Piece::King => "k",
         };
 
-        format!("{}{}{}", sq_to_san(self.from()).unwrap(), sq_to_san(self.to()).unwrap(), promotion_str)
+        format!(
+            "{}{}{}",
+            sq_to_san(self.from()).unwrap(),
+            sq_to_san(self.to()).unwrap(),
+            promotion_str
+        )
     }
 }
 
@@ -140,11 +149,10 @@ impl Piece {
     pub fn bb_index(&self, side: Side) -> Option<usize> {
         if *self == Piece::None {
             None
-        }
-        else {
+        } else {
             Some(match side {
                 Side::White => *self as usize - 1,
-                Side::Black => *self as usize - 1 + 6
+                Side::Black => *self as usize - 1 + 6,
             })
         }
     }
@@ -166,7 +174,7 @@ pub enum GameResult {
     FiftyMove,
     Stalemate,
     TheefoldRepetition,
-    Checkmate(Side)
+    Checkmate(Side),
 }
 
 pub const WQ_CASTLE: u8 = 1 << 0;
@@ -198,8 +206,8 @@ pub struct Position {
     pub halfmove_clock: usize,
     pub fullmoves: usize,
     pub hash: u64,
-    pesto_incr: pesto::Incremental, 
-    undos: Vec<Undo>
+    pesto_incr: pesto::Incremental,
+    undos: Vec<Undo>,
 }
 
 fn letter_to_file(l: char) -> Option<usize> {
@@ -212,16 +220,13 @@ fn letter_to_file(l: char) -> Option<usize> {
         'f' => Some(5),
         'g' => Some(6),
         'h' => Some(7),
-        _ => None
+        _ => None,
     }
 }
 
 impl Position {
     pub fn from_fen(fen: &str) -> Result<Self, String> {
         let mut cur = fen.chars().peekable();
-
-
-
 
         // parse piece placement
 
@@ -236,11 +241,13 @@ impl Position {
             }
 
             let mut file = 0usize;
-            
-            while file < 8 {
-                let sq = rank*8+file;
 
-                let c = cur.next().ok_or("unexpected end of FEN: rank not completed".to_string())?;
+            while file < 8 {
+                let sq = rank * 8 + file;
+
+                let c = cur
+                    .next()
+                    .ok_or("unexpected end of FEN: rank not completed".to_string())?;
 
                 match c {
                     skip @ '1'..='8' => {
@@ -249,75 +256,69 @@ impl Position {
 
                     x => {
                         let piece = match x {
-                            'p'|'P' => Piece::Pawn,
-                            'n'|'N' => Piece::Knight,
-                            'b'|'B' => Piece::Bishop,
-                            'r'|'R' => Piece::Rook,
-                            'q'|'Q' => Piece::Queen,
-                            'k'|'K' => Piece::King,
+                            'p' | 'P' => Piece::Pawn,
+                            'n' | 'N' => Piece::Knight,
+                            'b' | 'B' => Piece::Bishop,
+                            'r' | 'R' => Piece::Rook,
+                            'q' | 'Q' => Piece::Queen,
+                            'k' | 'K' => Piece::King,
                             _ => {
                                 return Err(format!("unexpected character '{}'", x));
                             }
                         };
 
-                        board_side[sq] = if x.is_lowercase() {Side::Black} else {Side::White};
+                        board_side[sq] = if x.is_lowercase() {
+                            Side::Black
+                        } else {
+                            Side::White
+                        };
                         board[sq] = piece;
 
                         file += 1;
                     }
                 }
             }
-
         }
-
-
-
-
-
 
         // fill bitboards
 
-        let mut bb = [0;12];
+        let mut bb = [0; 12];
 
         for sq in 0..64 {
             let side = board_side[sq];
 
             match board[sq] {
-                Piece::None => {},
+                Piece::None => {}
                 p => {
                     bb[p.bb_index(side).unwrap()] |= 1u64 << sq;
                 }
             }
-        } 
-
+        }
 
         if !matches!(cur.next(), Some(' ')) {
             return Err("unexpected end of FEN: expected side-to-move".to_string());
         }
 
-
         // parse side to move
 
-        let to_move_char = cur.next().ok_or("expected side to move ('w' or 'b')".to_string())?;
+        let to_move_char = cur
+            .next()
+            .ok_or("expected side to move ('w' or 'b')".to_string())?;
 
         let to_move = match to_move_char {
             'w' => Side::White,
             'b' => Side::Black,
-            c => return Err(format!("invalid side-to-move given '{}'", c))
+            c => return Err(format!("invalid side-to-move given '{}'", c)),
         };
-
-
-
 
         if !matches!(cur.next(), Some(' ')) {
             return Err("unexpected end of FEN: expected castling availability".to_string());
         }
 
-
         // parse castling flags
-        
+
         let mut castling = 0;
-        
+
         let mut set_castling = |flag| {
             if (castling & flag) != 0 {
                 return Err("invalid castling availability flags".to_string());
@@ -333,7 +334,9 @@ impl Position {
                 return Err("unexpected end of FEN: expected castling availability".to_string());
             }
 
-            Some('-') => {cur.next().unwrap();},
+            Some('-') => {
+                cur.next().unwrap();
+            }
 
             Some(_) => {
                 while let Some(&c) = cur.peek() {
@@ -346,33 +349,37 @@ impl Position {
                         'Q' => set_castling(WQ_CASTLE)?,
                         'k' => set_castling(BK_CASTLE)?,
                         'K' => set_castling(WK_CASTLE)?,
-                        x => return Err(format!("invalid castling flag '{}'", x))
+                        x => return Err(format!("invalid castling flag '{}'", x)),
                     }
                 }
             }
         }
 
-
-
-
         if !matches!(cur.next(), Some(' ')) {
             return Err("unexpected end of FEN: expected en passant square".to_string());
         }
 
-
         // parse en passant square
 
         let mut ep_sq = None;
-        
+
         match cur.peek() {
             None => return Err("unexpected end of FEN: expected en passant square".to_string()),
-            Some('-') => {cur.next().unwrap();},
+            Some('-') => {
+                cur.next().unwrap();
+            }
             Some(_) => {
                 let fl = cur.next().unwrap();
-                let file = letter_to_file(fl).ok_or(format!("invalid en passant square file '{}'", fl))?;
+                let file =
+                    letter_to_file(fl).ok_or(format!("invalid en passant square file '{}'", fl))?;
 
-                let rc = cur.next().ok_or(format!("unexpected end of FEN: expected an en passant square rank"))?;
-                let d = rc.to_digit(10).ok_or(format!("invalid en passant square rank '{}'", rc))? as usize;
+                let rc = cur.next().ok_or(format!(
+                    "unexpected end of FEN: expected an en passant square rank"
+                ))?;
+                let d = rc
+                    .to_digit(10)
+                    .ok_or(format!("invalid en passant square rank '{}'", rc))?
+                    as usize;
 
                 if d < 1 || d > 8 {
                     return Err(format!("en passant square rank '{}' is not valid", d));
@@ -380,10 +387,9 @@ impl Position {
 
                 let rank = d - 1;
 
-                ep_sq = Some(rank*8+file);
+                ep_sq = Some(rank * 8 + file);
             }
         }
-
 
         if !matches!(cur.next(), Some(' ')) {
             return Err("unexpected end of FEN: expected space before halfmove clock".to_string());
@@ -393,29 +399,31 @@ impl Position {
             return Err("unexpected end of FEN: expected halfmove clock".to_string());
         }
 
-        let mut halfmove_clock= 0;
+        let mut halfmove_clock = 0;
 
         while let Some(c) = cur.next() {
             if c == ' ' {
                 break;
             }
 
-            let x = c.to_digit(10).ok_or(format!("unexpected halfmove clock character '{}'", c))?;
+            let x = c
+                .to_digit(10)
+                .ok_or(format!("unexpected halfmove clock character '{}'", c))?;
 
             halfmove_clock *= 10;
             halfmove_clock += x as usize;
         }
 
-
-
         if !matches!(cur.peek(), Some('0'..='9')) {
             return Err("unexpected end of FEN: expected fullmove number".to_string());
         }
 
-        let mut fullmoves= 0;
+        let mut fullmoves = 0;
 
         while let Some(c) = cur.next() {
-            let x = c.to_digit(10).ok_or(format!("unexpected fullmove number character '{}'", c))?;
+            let x = c
+                .to_digit(10)
+                .ok_or(format!("unexpected fullmove number character '{}'", c))?;
 
             fullmoves *= 10;
             fullmoves += x as usize;
@@ -423,7 +431,7 @@ impl Position {
 
         let pesto_incr = pesto::Incremental::new(&bb, &board);
 
-        let mut pos = Position{
+        let mut pos = Position {
             bb,
             board,
             ep_sq,
@@ -433,7 +441,7 @@ impl Position {
             fullmoves,
             hash: 0,
             pesto_incr,
-            undos: vec![]
+            undos: vec![],
         };
 
         pos.hash = pos.compute_hash();
@@ -464,31 +472,27 @@ impl Position {
         }
 
         if legal_moves.len() == 0 {
-            return Some(
-                if self.checked(self.to_move) {
-                    GameResult::Checkmate(self.to_move.opp())
-                }
-                else {
-                    GameResult::Stalemate
-                }
-            )
-        }
-        else {
+            return Some(if self.checked(self.to_move) {
+                GameResult::Checkmate(self.to_move.opp())
+            } else {
+                GameResult::Stalemate
+            });
+        } else {
             None
         }
     }
 
     pub fn checked(&self, side: Side) -> bool {
         let king_sq = self.bb[Piece::King.bb_index(side).unwrap()].trailing_zeros();
-        self.sq_attacked(king_sq as _, side.opp()) 
+        self.sq_attacked(king_sq as _, side.opp())
     }
 
     pub fn occ(&self) -> u64 {
-        self.bb.iter().fold(0, |acc, x|acc|x)
+        self.bb.iter().fold(0, |acc, x| acc | x)
     }
 
     pub fn sq_attacked(&self, sq: usize, attacker: Side) -> bool {
-        let occ = self.bb.iter().fold(0, |acc, x|acc|x);
+        let occ = self.bb.iter().fold(0, |acc, x| acc | x);
 
         let pawn_attacks = match attacker {
             Side::White => black_pawn_attacks(1u64 << sq),
@@ -539,7 +543,7 @@ impl Position {
     pub fn dump(&self) {
         for rank in (0..8).rev() {
             for file in 0..8 {
-                let sq = rank*8+file;
+                let sq = rank * 8 + file;
                 let piece = self.board[sq];
 
                 let mut c = match piece {
@@ -553,9 +557,8 @@ impl Position {
                 };
 
                 let is_white = if let Some(bb_idx) = piece.bb_index(Side::White) {
-                    (self.bb[bb_idx] & (1u64 << sq)) != 0 
-                }
-                else {
+                    (self.bb[bb_idx] & (1u64 << sq)) != 0
+                } else {
                     false
                 };
 
@@ -570,14 +573,34 @@ impl Position {
         }
 
         println!("---------------");
-        println!("To move: {}", if self.to_move == Side::White {"w"} else {"b"});
-        println!("En passant square: {}", if let Some(ep) = self.ep_sq {sq_to_san(ep).unwrap()} else {"-".to_string()});
+        println!(
+            "To move: {}",
+            if self.to_move == Side::White {
+                "w"
+            } else {
+                "b"
+            }
+        );
+        println!(
+            "En passant square: {}",
+            if let Some(ep) = self.ep_sq {
+                sq_to_san(ep).unwrap()
+            } else {
+                "-".to_string()
+            }
+        );
 
         let castle_flag = |flag: u8, val| {
-            if (self.castling & flag) != 0 {val} else {""}
+            if (self.castling & flag) != 0 { val } else { "" }
         };
 
-        println!("Castling: {}{}{}{}", castle_flag(WK_CASTLE, "K"), castle_flag(WQ_CASTLE, "Q"), castle_flag(BK_CASTLE, "k"), castle_flag(BQ_CASTLE, "q"));
+        println!(
+            "Castling: {}{}{}{}",
+            castle_flag(WK_CASTLE, "K"),
+            castle_flag(WQ_CASTLE, "Q"),
+            castle_flag(BK_CASTLE, "k"),
+            castle_flag(BQ_CASTLE, "q")
+        );
 
         println!("Halfmove clock: {}", self.halfmove_clock);
         println!("Fullmoves: {}", self.fullmoves);
@@ -597,7 +620,7 @@ impl Position {
     }
 
     pub fn make_move(&mut self, mv: Move) {
-        let mut undo = Undo{
+        let mut undo = Undo {
             mv,
             repetition_boundary: false,
             capture_piece: None,
@@ -607,7 +630,7 @@ impl Position {
             halfmove_clock: self.halfmove_clock,
             fullmoves: self.fullmoves,
             pesto_incr: self.pesto_incr.clone(),
-            hash: self.hash
+            hash: self.hash,
         };
 
         let from = mv.from();
@@ -619,22 +642,17 @@ impl Position {
         let start = self.board[from];
         let end = match mv.promotion() {
             Piece::None => start,
-            x => x
+            x => x,
         };
-
 
         if start == Piece::Pawn {
             undo.repetition_boundary = true;
         }
 
-
-
         let (home_rank, promotion_rank) = match self.to_move {
             Side::White => (0, 7),
-            Side::Black => (7, 0)
+            Side::Black => (7, 0),
         };
-
-
 
         // remove moving piece
 
@@ -643,9 +661,6 @@ impl Position {
         self.hash ^= zobrist::PIECE[start.bb_index(self.to_move).unwrap()][from];
 
         self.pesto_incr.add_piece::<-1>(start, from, self.to_move);
-
-
-
 
         // remove captured piece
 
@@ -660,13 +675,12 @@ impl Position {
 
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
             self.board[capture_sq] = Piece::None;
-            self.hash ^= zobrist::PIECE[capture_piece.bb_index(self.to_move.opp()).unwrap()][capture_sq];
+            self.hash ^=
+                zobrist::PIECE[capture_piece.bb_index(self.to_move.opp()).unwrap()][capture_sq];
 
-            self.pesto_incr.add_piece::<-1>(capture_piece, capture_sq, self.to_move.opp());
+            self.pesto_incr
+                .add_piece::<-1>(capture_piece, capture_sq, self.to_move.opp());
         }
-
-
-
 
         // add moving piece
 
@@ -677,11 +691,11 @@ impl Position {
 
         self.pesto_incr.add_piece::<1>(end, to, self.to_move);
 
-
         // move rook if castling
 
         if let Some((rook_from, rook_to)) = is_castle(mv, start) {
-            self.bb[Piece::Rook.bb_index(self.to_move).unwrap()] ^= (1u64 << rook_from) | (1u64 << rook_to);
+            self.bb[Piece::Rook.bb_index(self.to_move).unwrap()] ^=
+                (1u64 << rook_from) | (1u64 << rook_to);
 
             debug_assert!(self.board[rook_from] == Piece::Rook);
 
@@ -693,12 +707,11 @@ impl Position {
             self.hash ^= zobrist::PIECE[piece_id][rook_from];
             self.hash ^= zobrist::PIECE[piece_id][rook_to];
 
-            self.pesto_incr.add_piece::<-1>(Piece::Rook, rook_from, self.to_move);
-            self.pesto_incr.add_piece::<1>(Piece::Rook, rook_to, self.to_move);
+            self.pesto_incr
+                .add_piece::<-1>(Piece::Rook, rook_from, self.to_move);
+            self.pesto_incr
+                .add_piece::<1>(Piece::Rook, rook_to, self.to_move);
         }
-
-
-
 
         // set en passant sq
 
@@ -708,19 +721,17 @@ impl Position {
             self.hash ^= zobrist::EP_SQUARE[ep];
         }
 
-        if start == Piece::Pawn && rank_diff > 1 { // double push
+        if start == Piece::Pawn && rank_diff > 1 {
+            // double push
             let sq = match self.to_move {
                 Side::White => to - 8,
-                Side::Black => to + 8
+                Side::Black => to + 8,
             };
 
             self.hash ^= zobrist::EP_SQUARE[sq];
 
             self.ep_sq = Some(sq);
         }
-
-
-
 
         // handle castling rights
 
@@ -731,8 +742,8 @@ impl Position {
             Side::Black => (BK_CASTLE, BQ_CASTLE, WK_CASTLE, WQ_CASTLE),
         };
 
-        let can_kcastle     = (self.castling & kcastle_flag) != 0;
-        let can_qcastle     = (self.castling & qcastle_flag) != 0;
+        let can_kcastle = (self.castling & kcastle_flag) != 0;
+        let can_qcastle = (self.castling & qcastle_flag) != 0;
         let opp_can_kcastle = (self.castling & opp_kcastle_flag) != 0;
         let opp_can_qcastle = (self.castling & opp_qcastle_flag) != 0;
 
@@ -747,7 +758,7 @@ impl Position {
                 self.castling &= !qcastle_flag;
             }
 
-            (Piece::Rook, 7, true, _) if from_rank == home_rank  => {
+            (Piece::Rook, 7, true, _) if from_rank == home_rank => {
                 self.castling &= !kcastle_flag;
             }
 
@@ -758,7 +769,12 @@ impl Position {
 
         let (capture_rank, capture_file) = rank_and_file(capture_sq);
 
-        match (capture_piece, capture_file, opp_can_kcastle, opp_can_qcastle) {
+        match (
+            capture_piece,
+            capture_file,
+            opp_can_kcastle,
+            opp_can_qcastle,
+        ) {
             (Piece::Rook, 0, _, true) if capture_rank == promotion_rank => {
                 self.castling &= !opp_qcastle_flag;
             }
@@ -772,18 +788,15 @@ impl Position {
 
         self.hash ^= zobrist::CASTLING[self.castling as usize];
 
-
         // update halfmove clock
 
         self.halfmove_clock += 1;
 
-        let is_capture = capture_piece != Piece::None; 
+        let is_capture = capture_piece != Piece::None;
 
         if start == Piece::Pawn || is_capture {
             self.halfmove_clock = 0;
         }
-
-
 
         // update move number
 
@@ -791,14 +804,10 @@ impl Position {
             self.fullmoves += 1;
         }
 
-
-
-
         // finally, update to-move
 
         self.to_move = self.to_move.opp();
         self.hash ^= zobrist::TO_MOVE_BLACK;
-
 
         // push to the undo stack
 
@@ -806,7 +815,7 @@ impl Position {
     }
 
     pub fn make_null_move(&mut self) {
-        self.undos.push(Undo{
+        self.undos.push(Undo {
             mv: NULL_MOVE,
             repetition_boundary: false,
             capture_piece: None,
@@ -816,7 +825,7 @@ impl Position {
             halfmove_clock: self.halfmove_clock,
             fullmoves: self.fullmoves,
             pesto_incr: self.pesto_incr.clone(),
-            hash: self.hash
+            hash: self.hash,
         });
 
         if let Some(ep) = self.ep_sq.take() {
@@ -842,7 +851,7 @@ impl Position {
         self.halfmove_clock = undo.halfmove_clock;
         self.fullmoves = undo.fullmoves;
         self.pesto_incr = undo.pesto_incr;
-        self.hash = undo.hash; 
+        self.hash = undo.hash;
     }
 
     pub fn unmake_move(&mut self) {
@@ -862,7 +871,7 @@ impl Position {
 
         let start = match mv.promotion() {
             Piece::None => end,
-            _ => Piece::Pawn
+            _ => Piece::Pawn,
         };
 
         // move rook if castle
@@ -870,7 +879,8 @@ impl Position {
         if let Some((rook_from, rook_to)) = is_castle(mv, start) {
             self.board[rook_to] = Piece::None;
             self.board[rook_from] = Piece::Rook;
-            self.bb[Piece::Rook.bb_index(self.to_move).unwrap()] ^= (1u64 << rook_from) | (1u64 << rook_to);
+            self.bb[Piece::Rook.bb_index(self.to_move).unwrap()] ^=
+                (1u64 << rook_from) | (1u64 << rook_to);
         }
 
         // remove piece
@@ -907,8 +917,7 @@ impl Position {
                 Side::White => to - 8,
                 Side::Black => to + 8,
             }
-        }
-        else {
+        } else {
             to
         }
     }
@@ -916,10 +925,19 @@ impl Position {
     pub fn compute_hash(&self) -> u64 {
         let mut hash = zobrist::BASE;
 
-        let black_bb = self.bb[6..].iter().fold(0, |acc, x|acc|x);
+        let black_bb = self.bb[6..].iter().fold(0, |acc, x| acc | x);
 
-        for (sq, &p) in self.board.iter().enumerate().filter(|&(_, &p)|p != Piece::None) {
-            let offset = if (black_bb & (1u64 << sq)) != 0 {6usize} else {0usize};
+        for (sq, &p) in self
+            .board
+            .iter()
+            .enumerate()
+            .filter(|&(_, &p)| p != Piece::None)
+        {
+            let offset = if (black_bb & (1u64 << sq)) != 0 {
+                6usize
+            } else {
+                0usize
+            };
             hash ^= zobrist::PIECE[p.id().unwrap() + offset][sq];
         }
 
@@ -946,11 +964,10 @@ impl Position {
 
     fn detect_attacker(&self, piece: Piece, side: Side, mask: u64) -> Option<(Piece, usize)> {
         let bb = self.bb[piece.bb_index(side).unwrap()];
-        
+
         if (bb & mask) != 0 {
             Some((piece, (bb & mask).trailing_zeros() as usize))
-        }
-        else {
+        } else {
             None
         }
     }
@@ -1015,7 +1032,7 @@ impl Position {
             self.make_move(mv);
 
             if !self.checked(side) {
-                count += self.perft(depth-1);
+                count += self.perft(depth - 1);
             }
 
             self.unmake_move();
@@ -1037,7 +1054,7 @@ impl Position {
             self.make_move(mv);
 
             if !self.checked(side) {
-                let n = self.perft(depth-1);
+                let n = self.perft(depth - 1);
                 total += n;
                 println!("{} {}", mv.uci_string(), n);
             }
@@ -1054,7 +1071,7 @@ impl Position {
 
         match self.board[capture_sq] {
             Piece::None => None,
-            p => Some(p)
+            p => Some(p),
         }
     }
 
@@ -1062,7 +1079,7 @@ impl Position {
         let mut count = 0;
 
         for undo in self.undos.iter().rev() {
-            if undo.repetition_boundary  {
+            if undo.repetition_boundary {
                 break;
             }
 
@@ -1077,20 +1094,18 @@ impl Position {
 
         false
     }
-
 }
 
 fn sq_to_san(sq: usize) -> Option<String> {
     if sq >= 64 {
         None
-    }
-    else {
+    } else {
         let file = sq & 0b111;
         let rank = (sq >> 3) & 0b111;
 
-        const FILE_LETTERS: [char;8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const FILE_LETTERS: [char; 8] = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
-        Some(format!("{}{}", FILE_LETTERS[file], rank+1))
+        Some(format!("{}{}", FILE_LETTERS[file], rank + 1))
     }
 }
 
@@ -1108,8 +1123,8 @@ fn black_pawn_attacks(pawns: u64) -> u64 {
     left | right
 }
 
-const KNIGHT_ATTACK_TABLE: [u64;64] = {
-    let mut out = [0;_];
+const KNIGHT_ATTACK_TABLE: [u64; 64] = {
+    let mut out = [0; _];
 
     let mut from = 0;
 
@@ -1121,8 +1136,8 @@ const KNIGHT_ATTACK_TABLE: [u64;64] = {
     out
 };
 
-const KING_ATTACK_TABLE: [u64;64] = {
-    let mut out = [0;_];
+const KING_ATTACK_TABLE: [u64; 64] = {
+    let mut out = [0; _];
 
     let mut from = 0;
 
@@ -1137,16 +1152,16 @@ const KING_ATTACK_TABLE: [u64;64] = {
 const fn gen_knight_attacks(from: usize) -> u64 {
     let knight = 1u64 << from;
 
-    let m0 = knight <<  6 & !(FILE_G | FILE_H);
+    let m0 = knight << 6 & !(FILE_G | FILE_H);
     let m1 = knight << 15 & !(FILE_H);
     let m2 = knight << 17 & !(FILE_A);
     let m3 = knight << 10 & !(FILE_A | FILE_B);
-    let m4 = knight >>  6 & !(FILE_A | FILE_B);
+    let m4 = knight >> 6 & !(FILE_A | FILE_B);
     let m5 = knight >> 15 & !(FILE_A);
     let m6 = knight >> 17 & !(FILE_H);
     let m7 = knight >> 10 & !(FILE_G | FILE_H);
 
-    m0|m1|m2|m3|m4|m5|m6|m7
+    m0 | m1 | m2 | m3 | m4 | m5 | m6 | m7
 }
 
 pub fn knight_attacks(from: u32) -> u64 {
@@ -1157,15 +1172,15 @@ const fn gen_king_attacks(from: usize) -> u64 {
     let king = 1u64 << from;
 
     let m0 = (king << 7) & !FILE_H;
-    let m1 =  king << 8;
+    let m1 = king << 8;
     let m2 = (king << 9) & !FILE_A;
     let m3 = (king << 1) & !FILE_A;
     let m4 = (king >> 7) & !FILE_A;
-    let m5 =  king >> 8;
+    let m5 = king >> 8;
     let m6 = (king >> 9) & !FILE_H;
     let m7 = (king >> 1) & !FILE_H;
 
-    m0|m1|m2|m3|m4|m5|m6|m7
+    m0 | m1 | m2 | m3 | m4 | m5 | m6 | m7
 }
 
 fn king_attacks(from: u32) -> u64 {
@@ -1194,7 +1209,6 @@ pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
     generated::magic::BISHOP_ATTACK_TABLE[from as usize][idx]
 }
 
-
 pub fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
     let (from_rank, from_file) = rank_and_file(mv.from());
     let (_, to_file) = rank_and_file(mv.to());
@@ -1206,9 +1220,9 @@ pub fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
     }
 
     Some(match to_file {
-        2 => (from_rank*8+0, from_rank*8+3),
-        6 => (from_rank*8+7, from_rank*8+5),
-        _ => panic!("invalid king move")
+        2 => (from_rank * 8 + 0, from_rank * 8 + 3),
+        6 => (from_rank * 8 + 7, from_rank * 8 + 5),
+        _ => panic!("invalid king move"),
     })
 }
 
@@ -1222,8 +1236,8 @@ pub fn parse_uci_move(uci: &str, side: Side) -> Option<Move> {
 
     let p = cur.next();
 
-    let from = ((r0.to_digit(10)?-1)*8) as usize + letter_to_file(f0)?;
-    let to = ((r1.to_digit(10)?-1)*8) as usize + letter_to_file(f1)?;
+    let from = ((r0.to_digit(10)? - 1) * 8) as usize + letter_to_file(f0)?;
+    let to = ((r1.to_digit(10)? - 1) * 8) as usize + letter_to_file(f1)?;
 
     let promotion = match p {
         None => Piece::None,
@@ -1231,10 +1245,10 @@ pub fn parse_uci_move(uci: &str, side: Side) -> Option<Move> {
         Some('b') => Piece::Bishop,
         Some('r') => Piece::Rook,
         Some('q') => Piece::Queen,
-        _ => return None
+        _ => return None,
     };
 
-    Some(Move::new(from,  to, promotion, side))
+    Some(Move::new(from, to, promotion, side))
 }
 
 pub fn benchmark_perft() {
@@ -1253,17 +1267,24 @@ pub fn benchmark_perft() {
 
     println!("Perft results");
     println!("=============");
-    println!("Position: {}{}", fen, if fen == KIWIPETE_FEN {" (kiwipete)"} else if fen == STARTING_FEN {" (startpos)"} else {""});
+    println!(
+        "Position: {}{}",
+        fen,
+        if fen == KIWIPETE_FEN {
+            " (kiwipete)"
+        } else if fen == STARTING_FEN {
+            " (startpos)"
+        } else {
+            ""
+        }
+    );
     println!("Depth: {}", depth);
     println!("Leaves: {}", n);
     println!("Elapsed: {:?}", duration);
-    println!("NPS: {:.2}M", nps/1_000_000.0);
+    println!("NPS: {:.2}M", nps / 1_000_000.0);
     println!("");
 }
 
 pub fn rank_and_file(sq: usize) -> (usize, usize) {
-    (
-        (sq >> 3) & 7,
-        sq & 7
-    )
+    ((sq >> 3) & 7, sq & 7)
 }
