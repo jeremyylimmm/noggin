@@ -1,12 +1,10 @@
+
 use core::f32;
 
-use noggin::search::*;
 use noggin::*;
+use noggin::search::*;
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 fn is_legal(pos: &mut Position, mv: Move) -> bool {
     let moves = movegen::gen_pseudolegal_moves(pos);
@@ -38,13 +36,11 @@ struct GoParameters {
     movetime: Option<f32>,
     nodes: usize,
     depth: usize,
-    infinite: bool,
+    infinite: bool
 }
 
 fn parse_ms(val: &str) -> Result<f32, String> {
-    let ms = val
-        .parse::<u32>()
-        .map_err(|_| format!("invalid time value '{}'", val))?;
+    let ms = val.parse::<u32>().map_err(|_|format!("invalid time value '{}'", val))?;
     Ok(ms as f32 / 1000.0)
 }
 
@@ -64,46 +60,50 @@ impl GoParameters {
             movetime: None,
             nodes: 1024 * 1024 * 1024,
             depth: 50,
-            infinite: false,
+            infinite: false
         };
 
         while i < args.len() {
             if args[i] == "wtime" {
-                let &wtime_str = args.get(i + 1).ok_or("expected wtime value")?;
+                let &wtime_str = args.get(i+1).ok_or("expected wtime value")?;
                 params.wtime = parse_ms(wtime_str)?;
                 i += 2;
-            } else if args[i] == "btime" {
-                let &btime_str = args.get(i + 1).ok_or("expected btime value")?;
+            }
+            else if args[i] == "btime" {
+                let &btime_str = args.get(i+1).ok_or("expected btime value")?;
                 params.btime = parse_ms(btime_str)?;
                 i += 2;
-            } else if args[i] == "winc" {
-                let &winc_str = args.get(i + 1).ok_or("expected winc value")?;
+            }
+            else if args[i] == "winc" {
+                let &winc_str = args.get(i+1).ok_or("expected winc value")?;
                 params.winc = parse_ms(winc_str)?;
                 i += 2;
-            } else if args[i] == "binc" {
-                let &binc_str = args.get(i + 1).ok_or("expected binc value")?;
+            }
+            else if args[i] == "binc" {
+                let &binc_str = args.get(i+1).ok_or("expected binc value")?;
                 params.binc = parse_ms(binc_str)?;
                 i += 2;
-            } else if args[i] == "movetime" {
-                let &movetime_str = args.get(i + 1).ok_or("expected movetime value")?;
+            }
+            else if args[i] == "movetime" {
+                let &movetime_str = args.get(i+1).ok_or("expected movetime value")?;
                 params.movetime = Some(parse_ms(movetime_str)?);
                 i += 2;
-            } else if args[i] == "nodes" {
-                let &nodes_str = args.get(i + 1).ok_or("expected nodes value")?;
-                params.nodes = nodes_str
-                    .parse::<usize>()
-                    .map_err(|_| format!("invalid nodes value '{}'", nodes_str))?;
+            }
+            else if args[i] == "nodes" {
+                let &nodes_str = args.get(i+1).ok_or("expected nodes value")?;
+                params.nodes = nodes_str.parse::<usize>().map_err(|_|format!("invalid nodes value '{}'", nodes_str))?;
                 i += 2;
-            } else if args[i] == "depth" {
-                let &depth_str = args.get(i + 1).ok_or("expected depth value")?;
-                params.depth = depth_str
-                    .parse::<usize>()
-                    .map_err(|_| format!("invalid depth value '{}'", depth_str))?;
+            }
+            else if args[i] == "depth" {
+                let &depth_str = args.get(i+1).ok_or("expected depth value")?;
+                params.depth = depth_str.parse::<usize>().map_err(|_|format!("invalid depth value '{}'", depth_str))?;
                 i += 2;
-            } else if args[i] == "infinite" {
+            }
+            else if args[i] == "infinite" {
                 params.infinite = true;
                 i += 1;
-            } else {
+            }
+            else {
                 i += 1;
             }
         }
@@ -115,7 +115,7 @@ impl GoParameters {
 fn allocate_time(params: &GoParameters, to_move: Side) -> (f32, f32) {
     if let Some(movetime) = params.movetime {
         return (movetime, movetime);
-    }
+    } 
 
     let (time, inc) = match to_move {
         Side::White => (params.wtime, params.winc),
@@ -130,10 +130,7 @@ fn allocate_time(params: &GoParameters, to_move: Side) -> (f32, f32) {
 
 enum Context {
     Idle(Position, Searcher),
-    Searching(
-        std::thread::JoinHandle<(Position, Searcher)>,
-        Arc<AtomicBool>,
-    ),
+    Searching(std::thread::JoinHandle<(Position, Searcher)>, Arc<AtomicBool>)
 }
 
 impl Context {
@@ -155,7 +152,8 @@ fn main() {
         if option == "bench" {
             bench_main();
             return;
-        } else if option == "metrics" {
+        }
+        else if option == "metrics" {
             metrics_main();
             return;
         }
@@ -180,23 +178,27 @@ fn main() {
             println!("uciok");
 
             context = Context::Idle(pos, searcher);
-        } else if args[0] == "isready" {
+        }
+        else if args[0] == "isready" {
             let (pos, searcher) = context.get();
 
             println!("readyok");
 
             context = Context::Idle(pos, searcher);
-        } else if args[0] == "quit" {
+        }
+        else if args[0] == "quit" {
             context.get();
             return;
-        } else if args[0] == "ucinewgame" {
+        }
+        else if args[0] == "ucinewgame" {
             context.get();
             let pos = Position::from_fen(STARTING_FEN).unwrap();
             let searcher = search::Searcher::new();
             context = Context::Idle(pos, searcher);
-        } else if args[0] == "position" {
+        }
+        else if args[0] == "position" {
             let (prev, searcher) = context.get();
-
+            
             if args.len() < 2 {
                 println!("specify 'startpos' or 'fen'");
                 context = Context::Idle(prev, searcher);
@@ -204,8 +206,12 @@ fn main() {
             }
 
             let (mut pos, mut next) = if args[1] == "startpos" {
-                (Position::from_fen(STARTING_FEN).unwrap(), 2)
-            } else if args[1] == "fen" {
+                (
+                    Position::from_fen(STARTING_FEN).unwrap(),
+                    2
+                )
+            }
+            else if args[1] == "fen" {
                 if args.len() < 8 {
                     println!("expected a FEN string");
                     context = Context::Idle(prev, searcher);
@@ -216,14 +222,19 @@ fn main() {
 
                 let pos = if let Ok(p) = Position::from_fen(&fen) {
                     p
-                } else {
+                }
+                else {
                     println!("malformed FEN '{}'", fen);
                     context = Context::Idle(prev, searcher);
                     continue;
                 };
-
-                (pos, 8)
-            } else {
+                
+                (
+                    pos,
+                    8
+                )
+            }
+            else {
                 println!("expected 'startpos' or 'fen', got '{}'", args[1]);
                 context = Context::Idle(prev, searcher);
                 continue;
@@ -249,7 +260,8 @@ fn main() {
 
                 let mv = if let Some(mv) = parse_uci_move(uci_mv, pos.to_move) {
                     mv
-                } else {
+                }
+                else {
                     println!("malformed move '{}'", uci_mv);
                     break;
                 };
@@ -263,7 +275,8 @@ fn main() {
             }
 
             context = Context::Idle(pos, searcher);
-        } else if args[0] == "go" {
+        }
+        else if args[0] == "go" {
             let (mut pos, mut searcher) = context.get();
 
             match GoParameters::parse(&args) {
@@ -273,7 +286,7 @@ fn main() {
                     let stop = searcher.stop.clone();
                     searcher.reset(hard_time, soft_time, params.nodes, params.nodes);
 
-                    let handle = std::thread::spawn(move || {
+                    let handle = std::thread::spawn(move ||{
                         let mv = searcher.best(&mut pos, params.depth as _);
                         println!("bestmove {}", mv.uci_string());
                         (pos, searcher)
@@ -286,14 +299,18 @@ fn main() {
                     println!("invalid go command: {}", e);
                     context = Context::Idle(pos, searcher);
                 }
+
             }
-        } else if args[0] == "stop" {
+        }
+        else if args[0] == "stop" {
             let (pos, searcher) = context.get();
             context = Context::Idle(pos, searcher);
-        } else if args[0] == "setoption" {
+        }
+        else if args[0] == "setoption" {
             let (pos, searcher) = context.get();
             context = Context::Idle(pos, searcher);
-        } else {
+        }
+        else {
             let (pos, searcher) = context.get();
             println!("unrecognized command '{}'", input);
             context = Context::Idle(pos, searcher);
@@ -305,15 +322,10 @@ fn bench_main() {
     let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
     let mut s = search::Searcher::new();
 
-    s.reset(
-        f32::INFINITY,
-        f32::INFINITY,
-        1024 * 1024 * 1024,
-        1024 * 1024 * 1024,
-    );
+    s.reset(f32::INFINITY, f32::INFINITY, 1024*1024*1024, 1024*1024*1024);
     s.best(&mut pos, 12);
 
-    let nps = s.nodes() as f32 / s.elapsed();
+    let nps = s.nodes() as f32 / s.elapsed(); 
 
     println!("{} nodes {} nps", s.nodes(), nps.round() as usize);
 }
@@ -323,12 +335,7 @@ fn metrics_main() {
         let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
         let mut s = search::Searcher::new();
 
-        s.reset(
-            f32::INFINITY,
-            f32::INFINITY,
-            1024 * 1024 * 1024,
-            1024 * 1024 * 1024,
-        );
+        s.reset(f32::INFINITY, f32::INFINITY, 1024*1024*1024, 1024*1024*1024);
         s.disable_uci();
 
         s.best(&mut pos, d);
@@ -337,11 +344,7 @@ fn metrics_main() {
         println!("=================");
         println!("time: {:.2}s", s.elapsed());
         println!("nodes: {}", s.nodes());
-        println!(
-            "qnodes: {} ({:.2}%)",
-            s.qnodes(),
-            s.qnodes() as f32 / s.nodes() as f32 * 100.0
-        );
+        println!("qnodes: {} ({:.2}%)", s.qnodes(), s.qnodes() as f32 / s.nodes() as f32 * 100.0);
         println!("nps: {:.2}M", s.nodes() as f32 / s.elapsed() / 1_000_000.0);
         println!("tt-hit: {:.2}%", s.tt_hit_rate() * 100.0);
         println!("tt-fill: {:.2}%", s.tt_fill() * 100.0);

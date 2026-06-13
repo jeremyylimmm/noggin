@@ -8,7 +8,7 @@ const FILE_H: u64 = 0x8080808080808080;
 const RANK_1: u64 = 0xff;
 const RANK_8: u64 = 0xff << 56;
 
-fn slide_and_gather<F: Fn(u64) -> u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
+fn slide_and_gather<F: Fn(u64)->u64>(mut cur: u64, occ: u64, slide: F) -> u64 {
     let mut result = 0;
 
     loop {
@@ -27,10 +27,10 @@ fn slide_and_gather<F: Fn(u64) -> u64>(mut cur: u64, occ: u64, slide: F) -> u64 
 pub fn rook_attacks(from: u32, occ: u64) -> u64 {
     let rook = 1u64 << from;
 
-    let up = slide_and_gather(rook, occ, |x| x << 8);
-    let right = slide_and_gather(rook, occ, |x| x << 1 & !FILE_A);
-    let down = slide_and_gather(rook, occ, |x| x >> 8);
-    let left = slide_and_gather(rook, occ, |x| x >> 1 & !FILE_H);
+    let up = slide_and_gather(rook, occ, |x|x<<8);
+    let right = slide_and_gather(rook, occ, |x|x<<1 & !FILE_A);
+    let down = slide_and_gather(rook, occ, |x|x>>8);
+    let left = slide_and_gather(rook, occ, |x|x>>1 & !FILE_H);
 
     up | right | down | left
 }
@@ -38,10 +38,10 @@ pub fn rook_attacks(from: u32, occ: u64) -> u64 {
 pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
     let bishop = 1u64 << from;
 
-    let left_up = slide_and_gather(bishop, occ, |x| x << 7 & !FILE_H);
-    let right_up = slide_and_gather(bishop, occ, |x| x << 9 & !FILE_A);
-    let right_down = slide_and_gather(bishop, occ, |x| x >> 7 & !FILE_A);
-    let left_down = slide_and_gather(bishop, occ, |x| x >> 9 & !FILE_H);
+    let left_up = slide_and_gather(bishop, occ, |x|x<<7 & !FILE_H);
+    let right_up = slide_and_gather(bishop, occ, |x|x<<9 & !FILE_A);
+    let right_down = slide_and_gather(bishop, occ, |x|x>>7 & !FILE_A);
+    let left_down = slide_and_gather(bishop, occ, |x|x>>9 & !FILE_H);
 
     left_up | right_up | right_down | left_down
 }
@@ -76,7 +76,7 @@ fn find_magic(mask: u64) -> (u64, u32) {
         }
 
         if success {
-            break (magic, shift);
+            break (magic, shift)
         }
     }
 }
@@ -94,7 +94,7 @@ fn file_mask(f: usize) -> u64 {
 }
 
 fn rank_mask(r: usize) -> u64 {
-    0xffu64 << (r * 8)
+    0xffu64 << (r*8)
 }
 
 fn get_rook_mask(sq: usize) -> u64 {
@@ -113,15 +113,10 @@ fn get_bishop_mask(sq: usize) -> u64 {
     bishop_attacks(sq as u32, 0) & !edges
 }
 
-fn gen_table<M: Fn(usize) -> u64, A: Fn(u32, u64) -> u64>(
-    stream: &mut File,
-    name: &str,
-    get_mask: M,
-    get_attacks: A,
-) {
-    let mut masks = [0u64; 64];
-    let mut magics = [0u64; 64];
-    let mut shifts = [0u32; 64];
+fn gen_table<M: Fn(usize)->u64, A: Fn(u32, u64)->u64>(stream: &mut File, name: &str, get_mask: M, get_attacks: A) {
+    let mut masks = [0u64;64];
+    let mut magics = [0u64;64];
+    let mut shifts = [0u32;64];
 
     for sq in 0..64 {
         let mask = get_mask(sq);
@@ -132,7 +127,7 @@ fn gen_table<M: Fn(usize) -> u64, A: Fn(u32, u64) -> u64>(
         shifts[sq as usize] = shift;
 
         let num_entries = 1 << mask.count_ones();
-        let mut bbs = vec![0u64; num_entries];
+        let mut bbs = vec![0u64;num_entries];
 
         let mut perm = mask;
 
@@ -148,43 +143,18 @@ fn gen_table<M: Fn(usize) -> u64, A: Fn(u32, u64) -> u64>(
             perm = (perm - 1) & mask;
         }
 
-        dump_table(
-            stream,
-            &format!("{}_ATTACK_TABLE_SQ_{}", name, sq),
-            &bbs,
-            "u64",
-        );
+        dump_table(stream, &format!("{}_ATTACK_TABLE_SQ_{}", name, sq), &bbs, "u64");
     }
 
-    write!(
-        stream,
-        "pub const {}_ATTACK_TABLE: [&[u64]; 64] = [\n",
-        name
-    )
-    .unwrap();
+    write!(stream, "pub const {}_ATTACK_TABLE: [&[u64]; 64] = [\n", name).unwrap();
     for sq in 0..64 {
         write!(stream, "    &{}_ATTACK_TABLE_SQ_{},\n", name, sq).unwrap();
     }
     write!(stream, "];\n\n").unwrap();
 
-    dump_table(
-        stream,
-        &format!("{}_ATTACK_TABLE_MASK", name),
-        &masks,
-        "u64",
-    );
-    dump_table(
-        stream,
-        &format!("{}_ATTACK_TABLE_SHIFT", name),
-        &shifts,
-        "u32",
-    );
-    dump_table(
-        stream,
-        &format!("{}_ATTACK_TABLE_MAGIC", name),
-        &magics,
-        "u64",
-    );
+    dump_table(stream, &format!("{}_ATTACK_TABLE_MASK", name), &masks, "u64");
+    dump_table(stream, &format!("{}_ATTACK_TABLE_SHIFT", name), &shifts, "u32");
+    dump_table(stream, &format!("{}_ATTACK_TABLE_MAGIC", name), &magics, "u64");
 }
 
 fn dump_table<T: fmt::LowerHex>(file: &mut File, name: &str, data: &[T], ty: &str) {
@@ -196,7 +166,7 @@ fn dump_table<T: fmt::LowerHex>(file: &mut File, name: &str, data: &[T], ty: &st
 
         write!(file, "0x{:x}, ", m).unwrap();
 
-        if (i + 1) % 8 == 0 {
+        if (i+1) % 8 == 0 {
             write!(file, "\n").unwrap();
         }
     }
@@ -211,12 +181,15 @@ fn main() {
 
 struct PCG32 {
     state: u64,
-    inc: u64,
+    inc: u64
 }
 
 impl PCG32 {
     pub fn new(state: u64, inc: u64) -> Self {
-        let mut s = Self { state, inc };
+        let mut s = Self {
+            state,
+            inc
+        };
 
         let _ = s.next64();
 
@@ -226,7 +199,7 @@ impl PCG32 {
     fn next32(&mut self) -> u32 {
         let oldstate = self.state;
         // Advance internal state
-        self.state = oldstate.overflowing_mul(6364136223846793005u64).0 + (self.inc | 1);
+        self.state = oldstate.overflowing_mul(6364136223846793005u64).0 + (self.inc|1);
         // Calculate output function (XSH RR), uses old state for max ILP
         let xorshifted: u32 = (((oldstate >> 18) ^ oldstate) >> 27) as u32;
         let rot: i32 = (oldstate >> 59) as i32;
@@ -239,23 +212,23 @@ impl PCG32 {
 }
 
 struct StaticBitset {
-    words: Vec<u64>,
+    words: Vec<u64>
 }
 
 impl StaticBitset {
     fn new(n: usize) -> Self {
         let nwords = (n + 63) / 64;
         Self {
-            words: vec![0; nwords],
+            words: vec![0;nwords]
         }
     }
 
     fn get(&self, idx: usize) -> bool {
-        ((self.words[idx / 64] >> (idx % 64)) & 1) != 0
+        ((self.words[idx/64] >> (idx % 64)) & 1) != 0
     }
 
     fn set(&mut self, idx: usize) {
-        self.words[idx / 64] |= 1u64 << (idx % 64);
+        self.words[idx/64] |= 1u64 << (idx % 64);
     }
 }
 
@@ -265,7 +238,7 @@ fn generate_attack_tables() {
 
     gen_table(&mut file, "ROOK", get_rook_mask, rook_attacks);
     gen_table(&mut file, "BISHOP", get_bishop_mask, bishop_attacks);
-
+    
     println!("cargo:rerun-if-changed=src/generated/magic.rs");
 }
 
@@ -276,12 +249,7 @@ fn generate_zobrist_tables() {
     let mut rng = PCG32::new(239823, 3);
 
     write!(file, "pub const BASE: u64 = 0x{:x};\n\n", rng.next64()).unwrap();
-    write!(
-        file,
-        "pub const TO_MOVE_BLACK: u64 = 0x{:x};\n\n",
-        rng.next64()
-    )
-    .unwrap();
+    write!(file, "pub const TO_MOVE_BLACK: u64 = 0x{:x};\n\n", rng.next64()).unwrap();
 
     write!(file, "pub const PIECE: [[u64;64]; 12] = [\n").unwrap();
 
@@ -292,7 +260,7 @@ fn generate_zobrist_tables() {
             if sq > 0 {
                 write!(file, ", ").unwrap();
             }
-
+            
             write!(file, "0x{:x}", rng.next64()).unwrap();
         }
 
@@ -301,10 +269,10 @@ fn generate_zobrist_tables() {
 
     write!(file, "];\n\n").unwrap();
 
-    let ep_sq: Vec<u64> = (0..64).map(|_| rng.next64()).collect();
+    let ep_sq: Vec<u64> = (0..64).map(|_|rng.next64()).collect();
     dump_table(&mut file, "EP_SQUARE", &ep_sq, "u64");
 
-    let mut castling = [0u64; 256];
+    let mut castling = [0u64;256];
 
     for i in 0..8 {
         castling[1 << i] = rng.next64();
@@ -317,7 +285,7 @@ fn generate_zobrist_tables() {
         while rem != 0 {
             let flag = (rem as u32).trailing_zeros() as usize;
             acc ^= castling[1 << flag];
-            rem &= rem - 1;
+            rem &= rem-1;
         }
 
         castling[i] = acc;
