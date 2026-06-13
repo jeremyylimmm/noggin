@@ -7,6 +7,7 @@ mod generated;
 mod nnue;
 
 pub mod movegen;
+pub mod pcg;
 pub mod search;
 
 pub const INF_SCORE: i32 = 50_000_000;
@@ -54,14 +55,14 @@ impl Side {
         }
     }
 
-    fn sign(&self) -> i32 {
+    pub fn sign(&self) -> i32 {
         match self {
             Side::White => 1,
             Side::Black => -1,
         }
     }
 
-    fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         match self {
             Side::White => 0,
             Side::Black => 1,
@@ -76,7 +77,7 @@ pub enum Side {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
-pub struct Move(u16);
+pub struct Move(pub u16);
 
 pub const NULL_MOVE: Move = Move(0);
 
@@ -90,19 +91,19 @@ impl Move {
         )
     }
 
-    fn from(&self) -> usize {
+    pub fn from(&self) -> usize {
         (self.0 & 0b111111) as usize
     }
 
-    fn to(&self) -> usize {
+    pub fn to(&self) -> usize {
         ((self.0 >> 6) & 0b111111) as usize
     }
 
-    fn side(&self) -> Side {
+    pub fn side(&self) -> Side {
         Side::from_id(((self.0 >> 15) & 1) as usize).unwrap()
     }
 
-    fn promotion(&self) -> Piece {
+    pub fn promotion(&self) -> Piece {
         let x = (self.0 >> 12) & 0b111;
 
         match x {
@@ -169,10 +170,17 @@ impl Piece {
     }
 }
 
-const WQ_CASTLE: u8 = 1 << 0;
-const WK_CASTLE: u8 = 1 << 1;
-const BQ_CASTLE: u8 = 1 << 2;
-const BK_CASTLE: u8 = 1 << 3;
+pub enum GameResult {
+    FiftyMove,
+    Stalemate,
+    TheefoldRepetition,
+    Checkmate(Side),
+}
+
+pub const WQ_CASTLE: u8 = 1 << 0;
+pub const WK_CASTLE: u8 = 1 << 1;
+pub const BQ_CASTLE: u8 = 1 << 2;
+pub const BK_CASTLE: u8 = 1 << 3;
 
 #[derive(Clone, PartialEq, Debug)]
 struct Undo {
@@ -187,7 +195,7 @@ struct Undo {
     hash: u64,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Position {
     pub bb: [u64; 12],
     pub board: [Piece; 64],
@@ -441,6 +449,39 @@ impl Position {
         Ok(pos)
     }
 
+    pub fn filter_legal(&mut self, moves: &mut movegen::MoveList) {
+        let side = self.to_move;
+
+        for i in (0..moves.len()).rev() {
+            let mv = moves[i];
+            self.make_move(mv);
+            if self.checked(side) {
+                moves.swap_remove(i);
+            }
+            self.unmake_move();
+        }
+    }
+
+    pub fn game_over(&mut self, legal_moves: &movegen::MoveList) -> Option<GameResult> {
+        if self.halfmove_clock == 100 {
+            return Some(GameResult::FiftyMove);
+        }
+
+        if self.is_threefold_repetition() {
+            return Some(GameResult::TheefoldRepetition);
+        }
+
+        if legal_moves.len() == 0 {
+            return Some(if self.checked(self.to_move) {
+                GameResult::Checkmate(self.to_move.opp())
+            } else {
+                GameResult::Stalemate
+            });
+        } else {
+            None
+        }
+    }
+
     pub fn checked(&self, side: Side) -> bool {
         let king_sq = self.bb[Piece::King.bb_index(side).unwrap()].trailing_zeros();
         self.sq_attacked(king_sq as _, side.opp())
@@ -565,7 +606,7 @@ impl Position {
         println!("Fullmoves: {}", self.fullmoves);
     }
 
-    fn eval(&mut self) -> i32 {
+    pub fn eval(&mut self) -> i32 {
         *self
             .evals
             .last_mut()
@@ -1191,7 +1232,7 @@ pub fn bishop_attacks(from: u32, occ: u64) -> u64 {
     generated::magic::BISHOP_ATTACK_TABLE[from as usize][idx]
 }
 
-fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
+pub fn is_castle(mv: Move, piece: Piece) -> Option<(usize, usize)> {
     let (from_rank, from_file) = rank_and_file(mv.from());
     let (_, to_file) = rank_and_file(mv.to());
 
@@ -1267,6 +1308,6 @@ pub fn benchmark_perft() {
     println!("");
 }
 
-fn rank_and_file(sq: usize) -> (usize, usize) {
+pub fn rank_and_file(sq: usize) -> (usize, usize) {
     ((sq >> 3) & 7, sq & 7)
 }

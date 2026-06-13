@@ -1,7 +1,9 @@
-use core::f32;
-
 use noggin::search::*;
 use noggin::*;
+
+use noggin::pcg::PCG32;
+
+mod viri;
 
 use std::sync::{
     Arc,
@@ -158,6 +160,9 @@ fn main() {
         } else if option == "metrics" {
             metrics_main();
             return;
+        } else if option == "datagen" {
+            datagen_main();
+            return;
         }
     }
 
@@ -271,10 +276,18 @@ fn main() {
                     let (soft_time, hard_time) = allocate_time(&params, pos.to_move);
 
                     let stop = searcher.stop.clone();
-                    searcher.reset(hard_time, soft_time, params.nodes, params.nodes);
 
                     let handle = std::thread::spawn(move || {
-                        let mv = searcher.best(&mut pos, params.depth as _);
+                        let mv = searcher
+                            .best(
+                                &mut pos,
+                                params.depth as _,
+                                hard_time,
+                                soft_time,
+                                params.nodes,
+                                params.nodes,
+                            )
+                            .0;
                         println!("bestmove {}", mv.uci_string());
                         (pos, searcher)
                     });
@@ -305,13 +318,14 @@ fn bench_main() {
     let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
     let mut s = search::Searcher::new();
 
-    s.reset(
+    s.best(
+        &mut pos,
+        12,
         f32::INFINITY,
         f32::INFINITY,
         1024 * 1024 * 1024,
         1024 * 1024 * 1024,
     );
-    s.best(&mut pos, 12);
 
     let nps = s.nodes() as f32 / s.elapsed();
 
@@ -323,15 +337,16 @@ fn metrics_main() {
         let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
         let mut s = search::Searcher::new();
 
-        s.reset(
+        s.disable_uci();
+
+        s.best(
+            &mut pos,
+            d,
             f32::INFINITY,
             f32::INFINITY,
             1024 * 1024 * 1024,
             1024 * 1024 * 1024,
         );
-        s.disable_uci();
-
-        s.best(&mut pos, d);
 
         println!("metrics depth {}", d);
         println!("=================");
@@ -347,5 +362,116 @@ fn metrics_main() {
         println!("tt-fill: {:.2}%", s.tt_fill() * 100.0);
         println!("tt-collision: {:.2}%", s.tt_collision_rate() * 100.0);
         println!("");
+    }
+}
+
+fn get_timestamp() -> std::time::Duration {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let now = SystemTime::now();
+    let timestamp = now.duration_since(UNIX_EPOCH).unwrap();
+
+    timestamp
+}
+
+fn attempt_datagen_match(match_index: usize) -> Option<viri::Game> {
+    let mut pos = Position::from_fen(STARTING_FEN).unwrap();
+
+    let seed_mix = match_index as u64;
+    let mut rng = PCG32::new(
+        get_timestamp().as_nanos() as u64 ^ seed_mix.wrapping_mul(6364136223846793005),
+        seed_mix * 2 + 3,
+    );
+
+    let mut searcher = Searcher::new();
+    searcher.disable_uci();
+
+    let mut seq = vec![];
+    let mut starting_pos = None;
+
+    const RANDOM_PLIES: usize = 10;
+
+    for ply in 0..10000 {
+        let mut legal_moves = movegen::gen_pseudolegal_moves(&pos);
+        pos.filter_legal(&mut legal_moves);
+
+        if let Some(result) = pos.game_over(&legal_moves) {
+            let mut start = starting_pos?;
+
+            let result_str = match result {
+                GameResult::Checkmate(Side::White) => "White mates",
+                GameResult::Checkmate(Side::Black) => "Black mates",
+                GameResult::Stalemate => "Draw by stalemate",
+                GameResult::TheefoldRepetition => "Draw by threefold-repetition",
+                GameResult::FiftyMove => "Draw by 50-move rule",
+            };
+
+            println!(
+                "Game {} ended in {} moves - {}",
+                match_index,
+                seq.len(),
+                result_str
+            );
+
+            let wdl = match result {
+                GameResult::Checkmate(Side::Black) => 0,
+                GameResult::Checkmate(Side::White) => 2,
+                _ => 1,
+            };
+
+            return Some(viri::Game {
+                board: viri::PackedBoard::from_position(&mut start, wdl),
+                seq,
+            });
+        }
+
+        if ply < RANDOM_PLIES {
+            let i = rng.range(0, legal_moves.len());
+            let mv = legal_moves[i];
+            pos.make_move(mv);
+        } else {
+            if ply == RANDOM_PLIES {
+                starting_pos = Some(pos.clone());
+            }
+
+            let (mv, score) = searcher.best(&mut pos, 50, 1e6, 1e6, 1_000_000_000, 5_000);
+
+            let vmv = viri::Move::from_native(&pos, mv);
+            let score = (pos.to_move.sign() * score).try_into().unwrap();
+
+            seq.push((vmv, score));
+
+            pos.make_move(mv);
+        }
+    }
+
+    None
+}
+
+fn run_datagen_match(index: usize, file: &std::sync::Mutex<std::fs::File>) {
+    let m = loop {
+        if let Some(m) = attempt_datagen_match(index) {
+            break m;
+        }
+    };
+
+    let mut f = file.lock().unwrap();
+
+    m.dump(&mut f);
+}
+
+fn datagen_main() {
+    use rayon::prelude::*;
+
+    loop {
+        let file =
+            std::fs::File::create(format!("data/data_{}.bin", get_timestamp().as_secs())).unwrap();
+        let file = std::sync::Mutex::new(file);
+
+        const MATCHES_PER_SHARD: usize = 10000;
+
+        (0..MATCHES_PER_SHARD)
+            .into_par_iter()
+            .for_each(|i| run_datagen_match(i, &file));
     }
 }

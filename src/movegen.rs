@@ -18,6 +18,12 @@ impl MoveList {
         self.count += 1;
     }
 
+    pub fn swap_remove(&mut self, idx: usize) {
+        assert!(idx < self.count);
+        self.data.swap(idx, self.count - 1);
+        self.count -= 1;
+    }
+
     pub fn len(&self) -> usize {
         self.count
     }

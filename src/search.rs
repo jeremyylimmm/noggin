@@ -360,7 +360,7 @@ impl Searcher {
         self.exited
     }
 
-    pub fn reset(
+    fn reset(
         &mut self,
         time_limit_hard: f32,
         time_limit_soft: f32,
@@ -729,10 +729,24 @@ impl Searcher {
         (best_score, best_move)
     }
 
-    pub fn best(&mut self, pos: &mut Position, depth: i32) -> Move {
-        let mut best_move = NULL_MOVE;
+    pub fn best(
+        &mut self,
+        pos: &mut Position,
+        depth: i32,
+        time_limit_hard: f32,
+        time_limit_soft: f32,
+        node_limit_hard: usize,
+        node_limit_soft: usize,
+    ) -> (Move, i32) {
+        self.reset(
+            time_limit_hard,
+            time_limit_soft,
+            node_limit_hard,
+            node_limit_soft,
+        );
 
-        let mut window_centre = 0i32;
+        let mut best_move = NULL_MOVE;
+        let mut best_score = 0i32;
 
         for d in 1..=depth {
             if self.nodes >= self.node_limit_soft || self.elapsed() >= self.time_limit_soft * 0.95 {
@@ -747,8 +761,8 @@ impl Searcher {
                     (-INF_SCORE, INF_SCORE)
                 } else {
                     (
-                        (window_centre - window_lo).clamp(-INF_SCORE, INF_SCORE),
-                        (window_centre + window_hi).clamp(-INF_SCORE, INF_SCORE),
+                        (best_score - window_lo).clamp(-INF_SCORE, INF_SCORE),
+                        (best_score + window_hi).clamp(-INF_SCORE, INF_SCORE),
                     )
                 };
 
@@ -769,7 +783,7 @@ impl Searcher {
                 break;
             }
 
-            window_centre = score;
+            best_score = score;
 
             let score_str = if score.abs() > MATE_SCORE - 1000 {
                 let plies = MATE_SCORE - score.abs();
@@ -799,7 +813,8 @@ impl Searcher {
                 );
             }
         }
-        best_move
+
+        (best_move, best_score)
     }
 
     fn push_move(&mut self, pos: &mut Position, mv: Move) {
