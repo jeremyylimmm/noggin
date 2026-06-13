@@ -9,10 +9,6 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 
 fn is_legal(pos: &mut Position, mv: Move) -> bool {
     let moves = movegen::gen_pseudolegal_moves(pos);
@@ -400,7 +396,7 @@ fn attempt_datagen_match(match_index: usize) -> Option<viri::Game> {
         pos.filter_legal(&mut legal_moves);
 
         if let Some(result) = pos.game_over(&legal_moves) {
-            let start = starting_pos?;
+            let mut start = starting_pos?;
 
             let result_str = match result {
                 GameResult::Checkmate(Side::White) => "White mates",
@@ -424,7 +420,7 @@ fn attempt_datagen_match(match_index: usize) -> Option<viri::Game> {
             };
 
             return Some(viri::Game {
-                board: viri::PackedBoard::from_position(&start, wdl),
+                board: viri::PackedBoard::from_position(&mut start, wdl),
                 seq,
             });
         }

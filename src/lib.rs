@@ -195,7 +195,7 @@ struct Undo {
     hash: u64,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Position {
     pub bb: [u64; 12],
     pub board: [Piece; 64],
@@ -606,7 +606,7 @@ impl Position {
         println!("Fullmoves: {}", self.fullmoves);
     }
 
-    fn eval(&mut self) -> i32 {
+    pub fn eval(&mut self) -> i32 {
         *self
             .evals
             .last_mut()

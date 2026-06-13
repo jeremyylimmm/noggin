@@ -94,7 +94,7 @@ impl Game {
 }
 
 impl PackedBoard {
-    pub fn from_position(pos: &noggin::Position, result: u8) -> Self {
+    pub fn from_position(pos: &mut noggin::Position, result: u8) -> Self {
         let black_occ = pos.bb[6..].iter().fold(0, |acc, x| acc | x);
 
         let pieces: Vec<u8> = pos
