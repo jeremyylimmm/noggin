@@ -4,7 +4,7 @@ use crate::generated::zobrist;
 mod searchtests;
 
 mod generated;
-mod pesto;
+mod nnue;
 
 pub mod movegen;
 pub mod pcg;
@@ -192,11 +192,10 @@ struct Undo {
     to_move: Side,
     halfmove_clock: usize,
     fullmoves: usize,
-    pesto_incr: pesto::Incremental,
     hash: u64,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Position {
     pub bb: [u64; 12],
     pub board: [Piece; 64],
@@ -206,7 +205,9 @@ pub struct Position {
     pub halfmove_clock: usize,
     pub fullmoves: usize,
     pub hash: u64,
-    pesto_incr: pesto::Incremental,
+
+    acc: Vec<nnue::Accumulator>,
+    evals: Vec<Option<i32>>,
     undos: Vec<Undo>,
 }
 
@@ -429,8 +430,6 @@ impl Position {
             fullmoves += x as usize;
         }
 
-        let pesto_incr = pesto::Incremental::new(&bb, &board);
-
         let mut pos = Position {
             bb,
             board,
@@ -440,7 +439,8 @@ impl Position {
             halfmove_clock,
             fullmoves,
             hash: 0,
-            pesto_incr,
+            acc: vec![nnue::Accumulator::new(&bb)],
+            evals: vec![None],
             undos: vec![],
         };
 
@@ -606,16 +606,20 @@ impl Position {
         println!("Fullmoves: {}", self.fullmoves);
     }
 
-    pub fn eval(&self) -> i32 {
-        self.pesto_incr.get()
+    fn eval(&mut self) -> i32 {
+        *self
+            .evals
+            .last_mut()
+            .unwrap()
+            .get_or_insert(self.acc.last().unwrap().forward())
     }
 
     #[allow(unused)]
     fn compute_eval(&self) -> i32 {
-        pesto::eval(&self.bb, &self.board)
+        nnue::compute(&self.bb)
     }
 
-    fn relative_eval(&self) -> i32 {
+    fn relative_eval(&mut self) -> i32 {
         self.to_move.sign() * self.eval()
     }
 
@@ -629,9 +633,10 @@ impl Position {
             to_move: self.to_move,
             halfmove_clock: self.halfmove_clock,
             fullmoves: self.fullmoves,
-            pesto_incr: self.pesto_incr.clone(),
             hash: self.hash,
         };
+
+        self.acc.push(self.acc.last().unwrap().clone());
 
         let from = mv.from();
         let to = mv.to();
@@ -660,7 +665,10 @@ impl Position {
         self.bb[start.bb_index(self.to_move).unwrap()] ^= 1u64 << from;
         self.hash ^= zobrist::PIECE[start.bb_index(self.to_move).unwrap()][from];
 
-        self.pesto_incr.add_piece::<-1>(start, from, self.to_move);
+        self.acc
+            .last_mut()
+            .unwrap()
+            .piece::<-1>(start, from, self.to_move);
 
         // remove captured piece
 
@@ -678,8 +686,10 @@ impl Position {
             self.hash ^=
                 zobrist::PIECE[capture_piece.bb_index(self.to_move.opp()).unwrap()][capture_sq];
 
-            self.pesto_incr
-                .add_piece::<-1>(capture_piece, capture_sq, self.to_move.opp());
+            self.acc
+                .last_mut()
+                .unwrap()
+                .piece::<-1>(capture_piece, capture_sq, self.to_move.opp());
         }
 
         // add moving piece
@@ -689,7 +699,10 @@ impl Position {
         self.bb[end.bb_index(self.to_move).unwrap()] ^= 1u64 << to;
         self.hash ^= zobrist::PIECE[end.bb_index(self.to_move).unwrap()][to];
 
-        self.pesto_incr.add_piece::<1>(end, to, self.to_move);
+        self.acc
+            .last_mut()
+            .unwrap()
+            .piece::<1>(end, to, self.to_move);
 
         // move rook if castling
 
@@ -707,10 +720,14 @@ impl Position {
             self.hash ^= zobrist::PIECE[piece_id][rook_from];
             self.hash ^= zobrist::PIECE[piece_id][rook_to];
 
-            self.pesto_incr
-                .add_piece::<-1>(Piece::Rook, rook_from, self.to_move);
-            self.pesto_incr
-                .add_piece::<1>(Piece::Rook, rook_to, self.to_move);
+            self.acc
+                .last_mut()
+                .unwrap()
+                .piece::<-1>(Piece::Rook, rook_from, self.to_move);
+            self.acc
+                .last_mut()
+                .unwrap()
+                .piece::<1>(Piece::Rook, rook_to, self.to_move);
         }
 
         // set en passant sq
@@ -812,6 +829,7 @@ impl Position {
         // push to the undo stack
 
         self.undos.push(undo);
+        self.evals.push(None);
     }
 
     pub fn make_null_move(&mut self) {
@@ -824,9 +842,12 @@ impl Position {
             to_move: self.to_move,
             halfmove_clock: self.halfmove_clock,
             fullmoves: self.fullmoves,
-            pesto_incr: self.pesto_incr.clone(),
             hash: self.hash,
         });
+
+        self.evals.push(None);
+
+        self.acc.push(self.acc.last().unwrap().clone());
 
         if let Some(ep) = self.ep_sq.take() {
             self.hash ^= zobrist::EP_SQUARE[ep];
@@ -844,18 +865,21 @@ impl Position {
 
     pub fn unmake_null_move(&mut self) {
         let undo = self.undos.pop().unwrap();
+        self.acc.pop().unwrap();
+        self.evals.pop();
 
         self.ep_sq = undo.ep_sq;
         self.castling = undo.castling;
         self.to_move = undo.to_move;
         self.halfmove_clock = undo.halfmove_clock;
         self.fullmoves = undo.fullmoves;
-        self.pesto_incr = undo.pesto_incr;
         self.hash = undo.hash;
     }
 
     pub fn unmake_move(&mut self) {
         let undo = self.undos.pop().unwrap();
+        self.acc.pop().unwrap();
+        self.evals.pop();
 
         let mv = undo.mv;
 
@@ -864,7 +888,6 @@ impl Position {
         self.to_move = undo.to_move;
         self.halfmove_clock = undo.halfmove_clock;
         self.fullmoves = undo.fullmoves;
-        self.pesto_incr = undo.pesto_incr;
         self.hash = undo.hash;
 
         let end = self.board[mv.to()];

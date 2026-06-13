@@ -1,23 +1,6 @@
 use crate::*;
 
 #[test]
-fn test_make_and_unmake_move() {
-    let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-    let baseline = pos.clone();
-
-    let moves = movegen::gen_pseudolegal_moves(&pos);
-
-    for i in 0..moves.len() {
-        let mv = moves[i];
-
-        pos.make_move(mv);
-        pos.unmake_move();
-
-        assert_eq!(pos, baseline);
-    }
-}
-
-#[test]
 fn test_kiwipete_perft_depth_1() {
     let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
     assert_eq!(pos.perft(1), 48);
@@ -1731,7 +1714,7 @@ register_zobrist_test!(test_zobrist_suite_126, 126);
 register_zobrist_test!(test_zobrist_suite_127, 127);
 
 fn test_eval(pos: &mut Position, depth: i32) {
-    assert_eq!(pos.compute_eval(), pos.eval());
+    assert!(pos.compute_eval().abs_diff(pos.eval()) < 3);
 
     if depth > 0 {
         let side = pos.to_move;

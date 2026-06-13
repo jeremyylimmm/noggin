@@ -9,6 +9,10 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 fn is_legal(pos: &mut Position, mv: Move) -> bool {
     let moves = movegen::gen_pseudolegal_moves(pos);
