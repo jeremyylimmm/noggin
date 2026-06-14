@@ -178,7 +178,7 @@ fn main() {
         if args[0] == "uci" {
             let (pos, searcher) = context.get();
 
-            println!("id name Noggin");
+            println!("id name Noggin 2.0");
             println!("id author Noggin Authors");
             println!("option name Hash type spin default 1 min 1 max 16");
             println!("option name Threads type spin default 1 min 1 max 1");
