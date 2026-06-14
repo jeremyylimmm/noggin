@@ -520,6 +520,13 @@ impl Searcher {
         mut alpha: i32,
         beta: i32,
     ) -> (i32, Move) {
+        let pv_node = beta > alpha + 1;
+        let ply = self.ss.len();
+
+        if pv_node && ply < self.pv_table.len() {
+            self.pv_table[ply][0] = NULL_MOVE;
+        }
+
         if depth <= 0 {
             return (self.qsearch(pos, alpha, beta), NULL_MOVE);
         }
@@ -528,14 +535,10 @@ impl Searcher {
             return (0, NULL_MOVE);
         }
 
-        let ply = self.ss.len();
-
         let alpha0 = alpha;
 
         let side = pos.to_move;
         let in_check = pos.checked(side);
-
-        let pv_node = beta > alpha + 1;
 
         if pos.is_threefold_repetition() {
             return (0, NULL_MOVE);
