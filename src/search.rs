@@ -406,7 +406,7 @@ impl Searcher {
 
         let pv_node = beta > alpha + 1;
 
-        if pos.is_threefold_repetition() || pos.fullmoves == 100 {
+        if pos.is_threefold_repetition() {
             return 0;
         }
 
@@ -493,7 +493,7 @@ impl Searcher {
             return -MATE_SCORE + ply as i32;
         }
 
-        if pos.halfmove_clock == 100 {
+        if pos.halfmove_clock >= 100 {
             return 0;
         }
 
@@ -540,7 +540,7 @@ impl Searcher {
         let side = pos.to_move;
         let in_check = pos.checked(side);
 
-        if pos.is_threefold_repetition() || pos.fullmoves == 100 {
+        if pos.is_threefold_repetition() || pos.halfmove_clock >= 100 {
             return (0, NULL_MOVE);
         }
 
@@ -733,10 +733,6 @@ impl Searcher {
             } else {
                 return (0, NULL_MOVE);
             }
-        }
-
-        if pos.halfmove_clock == 100 {
-            return (0, NULL_MOVE);
         }
 
         self.tt_set(
