@@ -513,6 +513,10 @@ impl Searcher {
         mut alpha: i32,
         beta: i32,
     ) -> (i32, Move) {
+        if depth <= 0 {
+            return (self.qsearch(pos, alpha, beta), NULL_MOVE);
+        }
+
         if self.exit_on_node() {
             return (0, NULL_MOVE);
         }
@@ -528,10 +532,6 @@ impl Searcher {
 
         if pos.is_threefold_repetition() {
             return (0, NULL_MOVE);
-        }
-
-        if depth <= 0 {
-            return (self.qsearch(pos, alpha, beta), NULL_MOVE);
         }
 
         let hash_move = if let Some(entry) = self.tt_query::<true>(pos.hash) {
