@@ -7,6 +7,7 @@ use std::sync::{
 };
 
 const MAX_DEPTH: usize = 128;
+const MAX_PV_SIZE: usize = 32;
 
 #[derive(Copy, Clone, PartialEq)]
 enum TTKind {
@@ -115,6 +116,8 @@ struct ContinuationTable {
     data: [[[i16; 64]; 6]; 2],
 }
 
+type Line = [Move; MAX_PV_SIZE];
+
 pub struct Searcher {
     pub stop: Arc<AtomicBool>,
     exited: bool,
@@ -124,6 +127,7 @@ pub struct Searcher {
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
     cont_hist: Box<[ContinuationTable; 64 * 6 * 2]>,
+    pv_table: [Line; MAX_PV_SIZE],
 
     enable_uci: bool,
 
@@ -252,6 +256,7 @@ impl Searcher {
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
             cont_hist: Box::new(std::array::from_fn(|_| ContinuationTable::new())),
+            pv_table: [[NULL_MOVE;_];_],
 
             enable_uci: true,
 
@@ -374,6 +379,8 @@ impl Searcher {
         self.time_limit_soft = time_limit_soft;
         self.node_limit_hard = node_limit_hard;
         self.node_limit_soft = node_limit_soft;
+
+        self.pv_table = [[NULL_MOVE;_];_];
 
         self.nodes = 0;
         self.qnodes = 0;
@@ -653,6 +660,22 @@ impl Searcher {
             if score > alpha {
                 alpha = score;
                 best_move = mv;
+
+                if pv_node && ply < self.pv_table.len() {
+                    self.pv_table[ply][0] = mv;
+
+                    if ply < self.pv_table.len() - 1 {
+                        for i in 0..MAX_PV_SIZE-1 {
+                            let pv_mv = self.pv_table[ply+1][i];
+
+                            self.pv_table[ply][i+1] = pv_mv;
+
+                            if pv_mv == NULL_MOVE {
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             if alpha >= beta {
@@ -801,6 +824,20 @@ impl Searcher {
 
             best_move = mv;
 
+            let mut pv_string = String::new();
+
+            for (i, &pv_mv) in self.pv_table[0].iter().enumerate() {
+                if pv_mv == NULL_MOVE {
+                    break;
+                }
+
+                if i > 0 {
+                    pv_string.push(' ');
+                }
+
+                pv_string.push_str(&pv_mv.uci_string());
+            }
+
             if self.enable_uci {
                 println!(
                     "info depth {} score {} nodes {} nps {} time {} pv {}",
@@ -809,7 +846,7 @@ impl Searcher {
                     self.nodes,
                     nps,
                     time,
-                    best_move.uci_string()
+                    pv_string
                 );
             }
         }
