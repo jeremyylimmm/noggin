@@ -406,7 +406,7 @@ impl Searcher {
 
         let pv_node = beta > alpha + 1;
 
-        if pos.is_threefold_repetition() {
+        if pos.is_threefold_repetition() || pos.fullmoves == 100 {
             return 0;
         }
 
@@ -540,7 +540,7 @@ impl Searcher {
         let side = pos.to_move;
         let in_check = pos.checked(side);
 
-        if pos.is_threefold_repetition() {
+        if pos.is_threefold_repetition() || pos.fullmoves == 100 {
             return (0, NULL_MOVE);
         }
 
