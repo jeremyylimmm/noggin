@@ -125,7 +125,7 @@ const unsafe fn read_object<T>(x: &mut T, buffer: &[u8], cursor: &mut usize) {
 }
 
 const fn load_model() -> (TypeW0, TypeB0, TypeW1, TypeB1) {
-    let raw = include_bytes!("../quantised.bin");
+    let raw = include_bytes!("../model.nnue");
 
     let mut w0 = std::mem::MaybeUninit::uninit();
     let mut b0 = std::mem::MaybeUninit::uninit();
