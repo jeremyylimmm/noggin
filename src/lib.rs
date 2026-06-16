@@ -1090,6 +1090,32 @@ impl Position {
         }
     }
 
+    pub fn is_repetition(&self, ply: usize) -> bool {
+        let mut count = 0;
+
+        for offset in 1..=self.halfmove_clock {
+            if offset > self.undos.len() {
+                break;
+            }
+
+            let i = self.undos.len() - offset;
+
+            if self.undos[i].hash == self.hash {
+                count += 1;
+
+                if count == 1 && offset <= ply {
+                    return true;
+                }
+
+                if count == 2 {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     pub fn is_threefold_repetition(&self) -> bool {
         let mut count = 0;
 
