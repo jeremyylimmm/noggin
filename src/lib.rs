@@ -185,7 +185,6 @@ pub const BK_CASTLE: u8 = 1 << 3;
 #[derive(Clone, PartialEq, Debug)]
 struct Undo {
     mv: Move,
-    repetition_boundary: bool,
     capture_piece: Option<Piece>,
     ep_sq: Option<usize>,
     castling: u8,
@@ -626,7 +625,6 @@ impl Position {
     pub fn make_move(&mut self, mv: Move) {
         let mut undo = Undo {
             mv,
-            repetition_boundary: false,
             capture_piece: None,
             ep_sq: self.ep_sq,
             castling: self.castling,
@@ -649,10 +647,6 @@ impl Position {
             Piece::None => start,
             x => x,
         };
-
-        if start == Piece::Pawn {
-            undo.repetition_boundary = true;
-        }
 
         let (home_rank, promotion_rank) = match self.to_move {
             Side::White => (0, 7),
@@ -679,7 +673,6 @@ impl Position {
             assert!(capture_piece != Piece::King);
 
             undo.capture_piece = Some(capture_piece);
-            undo.repetition_boundary = true;
 
             self.bb[capture_piece.bb_index(self.to_move.opp()).unwrap()] ^= 1u64 << capture_sq;
             self.board[capture_sq] = Piece::None;
@@ -835,7 +828,6 @@ impl Position {
     pub fn make_null_move(&mut self) {
         self.undos.push(Undo {
             mv: NULL_MOVE,
-            repetition_boundary: false,
             capture_piece: None,
             ep_sq: self.ep_sq,
             castling: self.castling,
@@ -1101,12 +1093,14 @@ impl Position {
     pub fn is_threefold_repetition(&self) -> bool {
         let mut count = 0;
 
-        for undo in self.undos.iter().rev() {
-            if undo.repetition_boundary {
+        for offset in 1..=self.halfmove_clock {
+            if offset > self.undos.len() {
                 break;
             }
 
-            if undo.hash == self.hash {
+            let i = self.undos.len() - offset;
+
+            if self.undos[i].hash == self.hash {
                 count += 1;
 
                 if count == 2 {
