@@ -1103,7 +1103,7 @@ impl Position {
             if self.undos[i].hash == self.hash {
                 count += 1;
 
-                if count == 1 && offset <= ply {
+                if count == 1 && offset < ply {
                     return true;
                 }
 
