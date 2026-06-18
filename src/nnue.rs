@@ -1,7 +1,7 @@
 use crate::*;
 
 const INPUT_SIZE: usize = 768;
-const HL0_SIZE: usize = 128;
+const HL0_SIZE: usize = 256;
 
 type TypeW0 = [[i16; HL0_SIZE / 2]; INPUT_SIZE];
 type TypeB0 = [i16; HL0_SIZE / 2];
