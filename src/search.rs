@@ -564,7 +564,7 @@ impl Searcher {
             let can_se = depth > 6 &&
                                exclude.is_none() &&
                                entry.depth >= depth - 3 &&
-                               entry.kind != TTKind::Lower &&
+                               entry.kind != TTKind::Upper &&
                                !entry.score(ply).is_mate();
 
             let singular_beta = entry.score(ply) - depth;
@@ -638,7 +638,7 @@ impl Searcher {
 
             if mv == hash_move && let Some(singular_beta) = singular_beta {
                 let singular_depth = (depth - 1) / 2;
-                let singular_score = self.search(pos, singular_depth, alpha, singular_beta, Some(mv)).0;
+                let singular_score = self.search(pos, singular_depth, singular_beta-1, singular_beta, Some(mv)).0;
 
                 if singular_score < singular_beta {
                     se_ext = 1;
