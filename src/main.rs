@@ -217,7 +217,7 @@ fn main() {
 
             println!("id name Noggin 2.0");
             println!("id author Noggin Authors");
-            println!("option name Hash type spin default 1 min 1 max 16");
+            println!("option name Hash type spin default 16 min 1 max 4096");
             println!("option name Threads type spin default 1 min 1 max 1");
             println!("uciok");
 
