@@ -254,12 +254,12 @@ fn tt_index(hash: u64, size: usize) -> usize {
 }
 
 impl Searcher {
-    pub fn new() -> Self {
+    pub fn new(hash_size_mb: usize) -> Self {
         Self {
             stop: Arc::new(AtomicBool::new(false)),
             exited: false,
 
-            tt: allocate_tt(16),
+            tt: allocate_tt(hash_size_mb),
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
@@ -281,6 +281,10 @@ impl Searcher {
             tt_collisions: 0,
             start_time: std::time::Instant::now(),
         }
+    }
+
+    pub fn resize_hash(&mut self, size_mb: usize) {
+        self.tt = allocate_tt(size_mb);
     }
 
     pub fn tt_hit_rate(&self) -> f32 {
