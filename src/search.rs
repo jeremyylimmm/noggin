@@ -10,6 +10,7 @@ const MAX_DEPTH: usize = 128;
 const MAX_PV_SIZE: usize = 32;
 
 #[derive(Copy, Clone, PartialEq)]
+#[repr(u8)]
 enum TTKind {
     Exact,
     Upper,
@@ -18,11 +19,11 @@ enum TTKind {
 
 #[derive(Clone)]
 struct TTEntry {
-    hash: u64,
+    id: u16,
+    kind: TTKind,
+    depth: u8,
     mv: Move,
     rel_score: i16,
-    kind: TTKind,
-    depth: i32,
 }
 
 const CONT_HISTORY_PLIES: [usize; 1] = [1];
@@ -39,7 +40,7 @@ const MAX_HISTORY: i16 = 30_000;
 impl TTEntry {
     fn empty() -> Self {
         Self {
-            hash: 0,
+            id: 0,
             mv: NULL_MOVE,
             kind: TTKind::Exact,
             rel_score: 0,
@@ -71,11 +72,11 @@ impl TTEntry {
         } as i16;
 
         Self {
-            hash,
+            id: hash as u16,
             mv,
             kind,
             rel_score,
-            depth,
+            depth: depth.try_into().unwrap(),
         }
     }
 
@@ -243,8 +244,14 @@ impl MovePicker {
     }
 }
 
-const TT_SIZE: usize = 1 << 22;
-const TT_MASK: u64 = (TT_SIZE - 1) as u64;
+fn allocate_tt(size_mb: usize) -> Vec<TTEntry> {
+    let n = size_mb * 1024 * 1024 / std::mem::size_of::<TTEntry>();
+    vec![TTEntry::empty();n] 
+}
+
+fn tt_index(hash: u64, size: usize) -> usize {
+    hash.carrying_mul(size as u64, 0).1 as usize
+}
 
 impl Searcher {
     pub fn new() -> Self {
@@ -252,7 +259,7 @@ impl Searcher {
             stop: Arc::new(AtomicBool::new(false)),
             exited: false,
 
-            tt: vec![TTEntry::empty(); 1 << 22],
+            tt: allocate_tt(8),
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
@@ -287,7 +294,7 @@ impl Searcher {
     pub fn tt_fill(&self) -> f32 {
         self.tt
             .iter()
-            .map(|x| if x.hash != 0 { 1 } else { 0 })
+            .map(|x| if x.id != 0 { 1 } else { 0 })
             .sum::<i32>() as f32
             / self.tt.len() as f32
     }
@@ -303,19 +310,19 @@ impl Searcher {
     }
 
     fn tt_query<const METRICS: bool>(&mut self, hash: u64) -> Option<TTEntry> {
-        let index = (hash & TT_MASK) as usize;
+        let index = tt_index(hash, self.tt.len());
 
         if METRICS {
             self.tt_attempts += 1;
         }
 
-        if self.tt[index].hash == hash {
+        if self.tt[index].id == (hash as _) {
             if METRICS {
                 self.tt_hits += 1;
             }
             Some(self.tt[index].clone())
         } else {
-            if self.tt[index].hash != 0 && METRICS {
+            if self.tt[index].id != 0 && METRICS {
                 self.tt_collisions += 1;
             }
             None
@@ -330,8 +337,7 @@ impl Searcher {
     }
 
     fn tt_set(&mut self, hash: u64, mv: Move, kind: TTKind, score: i32, ply: usize, depth: i32) {
-        let index = (hash & TT_MASK) as usize;
-
+        let index = tt_index(hash, self.tt.len());
         self.tt[index] = TTEntry::new(hash, mv, kind, score, ply, depth);
     }
 
@@ -555,7 +561,7 @@ impl Searcher {
         }
 
         let (hash_move, singular_beta) = if let Some(entry) = self.tt_query::<true>(pos.hash) {
-            if entry.depth >= depth && !pv_node {
+            if entry.depth as i32 >= depth && !pv_node {
                 if let Some((score, mv)) = entry.cutoff(ply, alpha, beta) {
                     return (score, mv);
                 }
@@ -563,7 +569,7 @@ impl Searcher {
 
             let can_se = depth > 6 &&
                                exclude.is_none() &&
-                               entry.depth >= depth - 3 &&
+                               entry.depth as i32 >= depth - 3 &&
                                entry.kind != TTKind::Upper &&
                                !entry.score(ply).is_mate();
 
