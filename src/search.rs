@@ -259,7 +259,7 @@ impl Searcher {
             stop: Arc::new(AtomicBool::new(false)),
             exited: false,
 
-            tt: allocate_tt(8),
+            tt: allocate_tt(16),
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
