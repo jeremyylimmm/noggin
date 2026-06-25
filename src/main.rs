@@ -150,7 +150,44 @@ impl Context {
     }
 }
 
+struct SetOption {
+    name: String,
+    value: i32
+}
+
+fn parse_setoption(args: &[&str]) -> Result<SetOption, String> {
+    let mut i = 1;    
+
+    let mut name = None;
+    let mut value = None;
+
+    while i < args.len() {
+        if args[i] == "name" {
+            name = Some(args.get(i+1).ok_or("no name given after 'name' directive".to_string())?);
+            i += 2;
+        } 
+        else if args[i] == "value" {
+            let val_str = args.get(i+1).ok_or("no value given after 'value' directive".to_string())?;
+            let val_int = val_str.parse::<i32>().map_err(|_|format!("expected a value, got '{}'", val_str))?;
+            value = Some(val_int);
+            i += 2;
+        }
+        else {
+            return Err(format!("invalid directive found '{}'", args[i]));
+        }
+    }
+
+    Ok(
+        SetOption {
+            name: name.ok_or("no option name given".to_string())?.to_string(),
+            value: value.ok_or("no value given".to_string())?,
+        }
+    )
+}
+
 fn main() {
+    let mut hash_size = 16;
+
     let args: Vec<String> = std::env::args().collect();
 
     if let Some(option) = args.get(1) {
@@ -166,7 +203,7 @@ fn main() {
         }
     }
 
-    let mut context = Context::Idle(Position::from_fen(STARTING_FEN).unwrap(), Searcher::new());
+    let mut context = Context::Idle(Position::from_fen(STARTING_FEN).unwrap(), Searcher::new(hash_size));
 
     loop {
         let mut input = String::new();
@@ -180,7 +217,7 @@ fn main() {
 
             println!("id name Noggin 2.0");
             println!("id author Noggin Authors");
-            println!("option name Hash type spin default 1 min 1 max 16");
+            println!("option name Hash type spin default 16 min 1 max 4096");
             println!("option name Threads type spin default 1 min 1 max 1");
             println!("uciok");
 
@@ -197,7 +234,7 @@ fn main() {
         } else if args[0] == "ucinewgame" {
             context.get();
             let pos = Position::from_fen(STARTING_FEN).unwrap();
-            let searcher = search::Searcher::new();
+            let searcher = search::Searcher::new(hash_size);
             context = Context::Idle(pos, searcher);
         } else if args[0] == "position" {
             let (prev, searcher) = context.get();
@@ -304,7 +341,29 @@ fn main() {
             let (pos, searcher) = context.get();
             context = Context::Idle(pos, searcher);
         } else if args[0] == "setoption" {
-            let (pos, searcher) = context.get();
+            let (pos, mut searcher) = context.get();
+
+            match parse_setoption(&args) {
+                Ok (opt) => {
+                    if opt.name == "Hash" {
+                        if opt.value > 0 {
+                            hash_size = opt.value as usize;
+                            searcher.resize_hash(hash_size);
+                        }
+                        else {
+                            println!("hash size must be non-zero");
+                        }
+                    }
+                    else {
+                        println!("unknown option '{}'", opt.name);
+                    }
+                }
+
+                Err(msg) => {
+                    println!("{}", msg);
+                }
+            }
+
             context = Context::Idle(pos, searcher);
         } else {
             let (pos, searcher) = context.get();
@@ -316,7 +375,7 @@ fn main() {
 
 fn bench_main() {
     let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-    let mut s = search::Searcher::new();
+    let mut s = search::Searcher::new(16);
 
     s.best(
         &mut pos,
@@ -335,7 +394,7 @@ fn bench_main() {
 fn metrics_main() {
     for d in 1..=12 {
         let mut pos = Position::from_fen(KIWIPETE_FEN).unwrap();
-        let mut s = search::Searcher::new();
+        let mut s = search::Searcher::new(16);
 
         s.disable_uci();
 
@@ -384,7 +443,7 @@ fn attempt_datagen_match(match_index: usize) -> Option<viri::Game> {
         seed_mix * 2 + 3,
     );
 
-    let mut searcher = Searcher::new();
+    let mut searcher = Searcher::new(16);
     searcher.disable_uci();
 
     let mut seq = vec![];
