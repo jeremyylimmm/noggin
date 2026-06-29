@@ -6,6 +6,7 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
     let mut moves = MoveList::new();
 
     let occ = pos.occ();
+    let allies = pos.side_occ(pos.stm);
     let opp = pos.side_occ(pos.stm.opp());
 
     let pawns = pos.bbs.get(Piece::Pawn, pos.stm);
@@ -54,6 +55,22 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
             } else {
                 moves.push(Move::new(from, to, None));
             }
+        }
+    }
+
+    let knights = pos.bbs.get(Piece::Knight, pos.stm);
+
+    for knight in iter_bb(knights) {
+        for to in iter_bb(knight_moves(knight, allies)) {
+            moves.push(Move::new(knight, to, None));
+        }
+    }
+
+    let kings = pos.bbs.get(Piece::King, pos.stm);
+
+    for king in iter_bb(kings) {
+        for to in iter_bb(king_moves(king, allies)) {
+            moves.push(Move::new(king, to, None));
         }
     }
 

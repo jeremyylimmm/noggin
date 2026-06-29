@@ -92,6 +92,12 @@ pub fn parse(fen: &str) -> Result<Position, String> {
     let &piece_placement = args.get(0).ok_or("no piece placement field".to_string())?;
     let (bbs, board) = fen::parse_piece_placement(piece_placement)?;
 
+    if bbs.get(Piece::King, Side::White).count_ones() != 1
+        || bbs.get(Piece::King, Side::Black).count_ones() != 1
+    {
+        return Err("invalid king placement".to_string());
+    }
+
     let &stm_str = args.get(1).ok_or("no side-to-move field")?;
 
     let stm = if stm_str == "w" {

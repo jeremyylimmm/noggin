@@ -170,7 +170,7 @@ impl Sq {
         format!("{}{}", f, r)
     }
 
-    pub fn bb(&self) -> u64 {
+    pub const fn bb(&self) -> u64 {
         1u64 << self.0
     }
 }
@@ -385,7 +385,7 @@ impl MoveList {
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
 
