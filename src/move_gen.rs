@@ -66,6 +66,30 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
         }
     }
 
+    let bishops = pos.bbs.get(Piece::Bishop, pos.stm);
+
+    for bishop in iter_bb(bishops) {
+        for to in iter_bb(bishop_moves(bishop, occ, allies)) {
+            moves.push(Move::new(bishop, to, None));
+        }
+    }
+
+    let rooks = pos.bbs.get(Piece::Rook, pos.stm);
+
+    for rook in iter_bb(rooks) {
+        for to in iter_bb(rook_moves(rook, occ, allies)) {
+            moves.push(Move::new(rook, to, None));
+        }
+    }
+
+    let queens = pos.bbs.get(Piece::Queen, pos.stm);
+
+    for queen in iter_bb(queens) {
+        for to in iter_bb(queen_moves(queen, occ, allies)) {
+            moves.push(Move::new(queen, to, None));
+        }
+    }
+
     let kings = pos.bbs.get(Piece::King, pos.stm);
 
     for king in iter_bb(kings) {

@@ -1,5 +1,7 @@
 use crate::*;
 
+use crate::generated::sliding_attacks;
+
 pub fn pawn_pushes(pawns: u64, occ: u64, side: Side) -> u64 {
     (pawns << (8 * side.sign())) & !occ
 }
@@ -79,4 +81,44 @@ pub fn king_moves(sq: Sq, allies: u64) -> u64 {
 
 pub fn knight_moves(sq: Sq, allies: u64) -> u64 {
     KNIGHT_ATTACKS[sq.0 as usize] & !allies
+}
+
+fn compute_magic_index(occ: u64, mask: u64, magic: u64, shift: u32) -> usize {
+    ((occ & mask).overflowing_mul(magic).0 >> shift) as usize
+}
+
+pub fn rook_attacks(sq: Sq, occ: u64) -> u64 {
+    let sq = sq.0 as usize;
+
+    let magic = sliding_attacks::ROOK_MAGICS[sq];
+    let mask = sliding_attacks::ROOK_MASKS[sq];
+    let shift = sliding_attacks::ROOK_SHIFTS[sq];
+
+    let index = compute_magic_index(occ, mask, magic, shift);
+
+    sliding_attacks::ROOK_TABLES[sq][index]
+}
+
+pub fn rook_moves(sq: Sq, occ: u64, allies: u64) -> u64 {
+    rook_attacks(sq, occ) & !allies
+}
+
+pub fn bishop_attacks(sq: Sq, occ: u64) -> u64 {
+    let sq = sq.0 as usize;
+
+    let magic = sliding_attacks::BISHOP_MAGICS[sq];
+    let mask = sliding_attacks::BISHOP_MASKS[sq];
+    let shift = sliding_attacks::BISHOP_SHIFTS[sq];
+
+    let index = compute_magic_index(occ, mask, magic, shift);
+
+    sliding_attacks::BISHOP_TABLES[sq][index]
+}
+
+pub fn bishop_moves(sq: Sq, occ: u64, allies: u64) -> u64 {
+    bishop_attacks(sq, occ) & !allies
+}
+
+pub fn queen_moves(sq: Sq, occ: u64, allies: u64) -> u64 {
+    (bishop_attacks(sq, occ) | rook_attacks(sq, occ)) & !allies
 }

@@ -2,6 +2,8 @@ mod attacks;
 mod fen;
 mod move_gen;
 
+pub mod generated;
+
 #[allow(unused)]
 pub const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 #[allow(unused)]
@@ -129,6 +131,67 @@ impl Position {
 
     pub fn gen_psuedolegal_moves(&self) -> MoveList {
         move_gen::gen_psuedolegal(self)
+    }
+
+    #[allow(unused)]
+    pub fn debug_str(&self) -> String {
+        use std::fmt::Write;
+        let mut result = String::new();
+
+        let black = self.side_occ(Side::Black);
+
+        for r in (0..8).rev() {
+            write!(result, "{} | ", r + 1).unwrap();
+
+            for f in 0..8 {
+                let sq = Sq::from_coords(r, f);
+                let is_black = sq.bb() & black != 0;
+
+                write!(
+                    result,
+                    "{} ",
+                    match self.board[sq] {
+                        Some(p) =>
+                            if is_black {
+                                p.san_lowercase()
+                            } else {
+                                p.san_lowercase().to_ascii_uppercase()
+                            },
+                        None => '.',
+                    }
+                )
+                .unwrap();
+            }
+            write!(result, "\n").unwrap();
+        }
+
+        write!(result, "    ");
+
+        for _ in 0..8 {
+            write!(result, "--");
+        }
+
+        write!(result, "\n    a b c d e f g h\n");
+
+        write!(result, "\n").unwrap();
+
+        write!(result, "Side-to-move: {}\n", self.stm.char()).unwrap();
+        write!(
+            result,
+            "Castle rights: {}\n",
+            fen::castle_rights_str(self.castle_rights)
+        )
+        .unwrap();
+        write!(
+            result,
+            "En-passant: {}\n",
+            self.ep.map_or("-".to_string(), |sq| sq.san())
+        )
+        .unwrap();
+        write!(result, "Halfmove clock: {}\n", self.halfmove_clock).unwrap();
+        write!(result, "Fullmoves: {}\n", self.fullmoves).unwrap();
+
+        result
     }
 }
 

@@ -206,7 +206,26 @@ pub fn to_fen(pos: &Position) -> String {
 
     write!(result, " {} ", pos.stm.char()).unwrap();
 
-    if pos.castle_rights == 0 {
+    write!(result, "{}", castle_rights_str(pos.castle_rights)).unwrap();
+
+    write!(
+        result,
+        " {} ",
+        pos.ep.map_or("-".to_string(), |sq| sq.san())
+    )
+    .unwrap();
+
+    write!(result, "{} {}", pos.halfmove_clock, pos.fullmoves).unwrap();
+
+    result
+}
+
+pub fn castle_rights_str(rights: u8) -> String {
+    use std::fmt::Write;
+
+    let mut result = String::new();
+
+    if rights == 0 {
         write!(result, "-").unwrap();
     } else {
         for (c, flag) in [
@@ -215,19 +234,11 @@ pub fn to_fen(pos: &Position) -> String {
             ('k', CASTLE_RIGHT_K_BLACK),
             ('q', CASTLE_RIGHT_Q_BLACK),
         ] {
-            if pos.castle_rights & flag != 0 {
+            if rights & flag != 0 {
                 write!(result, "{}", c).unwrap();
             }
         }
     }
-
-    if let Some(sq) = pos.ep {
-        write!(result, " {} ", sq.san()).unwrap();
-    } else {
-        write!(result, " - ").unwrap();
-    }
-
-    write!(result, "{} {}", pos.halfmove_clock, pos.fullmoves).unwrap();
 
     result
 }
