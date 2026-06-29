@@ -201,7 +201,7 @@ pub fn to_fen(pos: &Position) -> String {
     write!(result, " {} ", pos.stm.char()).unwrap();
 
     if pos.castle_rights == 0 {
-        write!(result, "- ").unwrap();
+        write!(result, "-").unwrap();
     } else {
         for (c, flag) in [
             ('K', CASTLE_RIGHT_K_WHITE),
@@ -217,8 +217,7 @@ pub fn to_fen(pos: &Position) -> String {
 
     if let Some(sq) = pos.ep {
         write!(result, " {} ", sq.san()).unwrap();
-    }
-    else {
+    } else {
         write!(result, " - ").unwrap();
     }
 
@@ -233,11 +232,17 @@ mod tests {
 
     #[test]
     fn test_startpos_read_write() {
-        assert_eq!(Position::from_fen(STARTPOS_FEN).unwrap().fen(), STARTPOS_FEN);
+        assert_eq!(
+            Position::from_fen(STARTPOS_FEN).unwrap().fen(),
+            STARTPOS_FEN
+        );
     }
 
     #[test]
     fn test_kiwipete_read_write() {
-        assert_eq!(Position::from_fen(KIWIPETE_FEN).unwrap().fen(), KIWIPETE_FEN);
+        assert_eq!(
+            Position::from_fen(KIWIPETE_FEN).unwrap().fen(),
+            KIWIPETE_FEN
+        );
     }
 }
