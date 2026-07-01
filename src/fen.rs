@@ -148,7 +148,7 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         .parse::<usize>()
         .map_err(|_| format!("fullmoves field '{}' is invalid", fullmoves_str))?;
 
-    Ok(Position {
+    let mut pos = Position {
         bbs,
         board,
         stm,
@@ -156,7 +156,12 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         ep,
         halfmove_clock: halfmove_clock as _,
         fullmoves: fullmoves as _,
-    })
+        threats: 0,
+    };
+
+    pos.update_threats();
+
+    Ok(pos)
 }
 
 pub fn to_fen(pos: &Position) -> String {

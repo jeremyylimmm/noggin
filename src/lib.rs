@@ -111,6 +111,7 @@ pub struct Position {
     ep: Option<Sq>,
     halfmove_clock: i16,
     fullmoves: i16,
+    threats: u64,
 }
 
 impl Position {
@@ -137,12 +138,52 @@ impl Position {
         move_gen::gen_psuedolegal(self)
     }
 
+    pub fn king_sq(&self, side: Side) -> Sq {
+        Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _)
+    }
+
+    pub fn update_threats(&mut self) {
+        self.threats = 0;
+
+        let attacker = self.stm.opp();
+        let kingless_occ = self.occ() ^ self.king_sq(self.stm).bb();
+
+        let pawns = self.bbs.get(Piece::Pawn, attacker);
+        self.threats |= attacks::pawn_attacks(pawns, attacker);
+
+        let knights = self.bbs.get(Piece::Knight, attacker);
+
+        for knight in iter_bb(knights) {
+            self.threats |= attacks::knight_attacks(knight);
+        }
+
+        let bishops = self.bbs.get(Piece::Bishop, attacker);
+
+        for bishop in iter_bb(bishops) {
+            self.threats |= attacks::bishop_attacks(bishop, kingless_occ);
+        }
+
+        let rooks = self.bbs.get(Piece::Rook, attacker);
+
+        for rook in iter_bb(rooks) {
+            self.threats |= attacks::rook_attacks(rook, kingless_occ);
+        }
+
+        let queens = self.bbs.get(Piece::Queen, attacker);
+
+        for queen in iter_bb(queens) {
+            self.threats |= attacks::queen_attacks(queen, kingless_occ);
+        }
+
+        self.threats |= attacks::king_attacks(self.king_sq(attacker));
+    }
+
     pub fn attacked(&self, sq: Sq, attacker: Side) -> bool {
         let occ = self.occ();
 
         let pawns = self.bbs.get(Piece::Pawn, attacker);
 
-        if pawns & attacks::pawn_attacks(sq, attacker.opp()) != 0 {
+        if pawns & attacks::pawn_attacks(sq.bb(), attacker.opp()) != 0 {
             return true;
         }
 
@@ -264,6 +305,8 @@ impl Position {
         }
 
         result.stm = result.stm.opp();
+
+        result.update_threats();
 
         result
     }

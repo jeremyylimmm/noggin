@@ -37,17 +37,8 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
 
     let ep_mask = pos.ep.map_or(0, |x| x.bb());
 
-    let (left_captures, right_captures) = match pos.stm {
-        Side::White => (
-            pawn_captures_left_white(pawns, opp | ep_mask),
-            pawn_captures_right_white(pawns, opp | ep_mask),
-        ),
-
-        Side::Black => (
-            pawn_captures_left_black(pawns, opp | ep_mask),
-            pawn_captures_right_black(pawns, opp | ep_mask),
-        ),
-    };
+    let left_captures = attacks::pawn_captures_left(pawns, opp | ep_mask, pos.stm);
+    let right_captures = attacks::pawn_captures_right(pawns, opp | ep_mask, pos.stm);
 
     for (bb, offset) in [left_captures, right_captures] {
         for to in iter_bb(bb) {
@@ -109,8 +100,7 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
 
         if pos.has_king_castle_rights(pos.stm)
             && occ & (MASK_KING_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
-            && !iter_bb(MASK_KING_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()])
-                .any(|sq| pos.attacked(sq, pos.stm.opp()))
+            && (MASK_KING_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()]) & pos.threats == 0
         {
             let to = Sq::from_coords(king_sq.rank(), 6);
             moves.push(Move::new(king_sq, to, None));
@@ -118,8 +108,7 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
 
         if pos.has_queen_castle_rights(pos.stm)
             && occ & (MASK_QUEEN_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
-            && !iter_bb(MASK_QUEEN_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()])
-                .any(|sq| pos.attacked(sq, pos.stm.opp()))
+            && (MASK_QUEEN_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()]) & pos.threats == 0
         {
             let to = Sq::from_coords(king_sq.rank(), 2);
             moves.push(Move::new(king_sq, to, None));
