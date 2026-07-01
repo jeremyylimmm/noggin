@@ -94,7 +94,7 @@ const CASTLE_RIGHT_Q_WHITE: CastleRights = 1 << 1;
 const CASTLE_RIGHT_K_BLACK: CastleRights = 1 << 2;
 const CASTLE_RIGHT_Q_BLACK: CastleRights = 1 << 3;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Sq(u8);
 
 pub type Board = [Option<Piece>; 64];
@@ -112,6 +112,7 @@ pub struct Position {
     halfmove_clock: i16,
     fullmoves: i16,
     threats: u64,
+    pins: u64,
 }
 
 impl Position {
@@ -134,15 +135,20 @@ impl Position {
         }
     }
 
-    pub fn gen_psuedolegal_moves(&self) -> MoveList {
-        move_gen::gen_psuedolegal(self)
+    pub fn gen_legal_moves(&self) -> MoveList {
+        move_gen::gen_legal(self)
     }
 
     pub fn king_sq(&self, side: Side) -> Sq {
         Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _)
     }
 
-    pub fn update_threats(&mut self) {
+    pub fn update_threats_and_pins(&mut self) {
+        self.update_threats();
+        self.update_pins();
+    }
+
+    fn update_threats(&mut self) {
         self.threats = 0;
 
         let attacker = self.stm.opp();
@@ -178,46 +184,73 @@ impl Position {
         self.threats |= attacks::king_attacks(self.king_sq(attacker));
     }
 
-    pub fn attacked(&self, sq: Sq, attacker: Side) -> bool {
+    fn update_pins(&mut self) {
+        self.pins = 0;
+
+        let king_sq = self.king_sq(self.stm);
         let occ = self.occ();
 
-        let pawns = self.bbs.get(Piece::Pawn, attacker);
+        type LineFn = fn(Sq, Sq) -> u64;
 
-        if pawns & attacks::pawn_attacks(sq.bb(), attacker.opp()) != 0 {
-            return true;
+        let candidates: [(Piece, LineFn); 3] = [
+            (Piece::Bishop, |a, b| line_between_diagonal(a, b).1),
+            (Piece::Rook, |a, b| line_between_straight(a, b).1),
+            (Piece::Queen, |a, b| line_between_diagonal(a, b).1 | line_between_straight(a, b).1),
+        ];
+
+        for (p, line) in candidates {
+            let bb = self.bbs.get(p, self.stm.opp());
+
+            for from in iter_bb(bb) {
+                let between= line(from, king_sq);
+                let mask = occ & between;
+                if mask.count_ones() == 1 {
+                    self.pins |= mask;
+                }
+            }
         }
+    }
+
+    pub fn pin_ray(&self, sq: Sq) -> u64 {
+        if sq.bb() & self.pins != 0 {
+            line_along(sq, self.king_sq(self.stm))
+        }
+        else {
+            u64::MAX
+        }
+    }
+
+    pub fn checked(&self, side: Side) -> Check {
+        let sq = self.king_sq(side);
+        let attacker = side.opp();
+
+        let occ = self.occ();
+
+        let mut checkers = 0;
+
+        let pawns = self.bbs.get(Piece::Pawn, attacker);
+        checkers |= pawns & attacks::pawn_attacks(sq.bb(), side);
 
         let knights = self.bbs.get(Piece::Knight, attacker);
-
-        if knights & attacks::knight_attacks(sq) != 0 {
-            return true;
-        }
+        checkers |= knights & attacks::knight_attacks(sq);
 
         let bishops = self.bbs.get(Piece::Bishop, attacker);
-
-        if bishops & attacks::bishop_attacks(sq, occ) != 0 {
-            return true;
-        }
+        checkers |= bishops & attacks::bishop_attacks(sq, occ);
 
         let rooks = self.bbs.get(Piece::Rook, attacker);
-
-        if rooks & attacks::rook_attacks(sq, occ) != 0 {
-            return true;
-        }
+        checkers |= rooks & attacks::rook_attacks(sq, occ);
 
         let queens = self.bbs.get(Piece::Queen, attacker);
-
-        if queens & attacks::queen_attacks(sq, occ) != 0 {
-            return true;
-        }
+        checkers |= queens & attacks::queen_attacks(sq, occ);
 
         let kings = self.bbs.get(Piece::King, attacker);
+        checkers |= kings & attacks::king_attacks(sq);
 
-        if kings & attacks::king_attacks(sq) != 0 {
-            return true;
+        match checkers.count_ones() {
+            0 => Check::None,
+            1 => Check::Single(Sq(checkers.trailing_zeros() as _)),
+            _ => Check::Double
         }
-
-        false
     }
 
     pub fn make_move(&self, mv: Move) -> Position {
@@ -232,6 +265,7 @@ impl Position {
         result.board[mv.from()] = None;
 
         if let Some((cap_sq, cap_piece)) = capture {
+            assert!(cap_piece != Piece::King);
             *result.bbs.get_mut(cap_piece, self.stm.opp()) ^= cap_sq.bb();
             result.board[cap_sq] = None;
         }
@@ -306,7 +340,7 @@ impl Position {
 
         result.stm = result.stm.opp();
 
-        result.update_threats();
+        result.update_threats_and_pins();
 
         result
     }
@@ -348,11 +382,6 @@ impl Position {
         ))
     }
 
-    fn checked(&self, side: Side) -> bool {
-        let king_sq = Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _);
-        self.attacked(king_sq, side.opp())
-    }
-
     fn has_king_castle_rights(&self, side: Side) -> bool {
         self.castle_rights & side.king_castle_rights_flag() != 0
     }
@@ -362,33 +391,39 @@ impl Position {
     }
 
     pub fn perft(&self, depth: i32) -> usize {
+        if depth == 1 {
+            return self.gen_legal_moves().len();
+        }
+
         if depth <= 0 {
             return 1;
         }
 
-        let moves = self.gen_psuedolegal_moves();
+        let moves = self.gen_legal_moves();
 
         let mut count = 0;
 
         for mv in moves {
             let child = self.make_move(mv);
-            if !child.checked(self.stm) {
-                count += child.perft(depth-1);
+            if !child.checked(self.stm).is_none() {
+                println!("illegal move {}: {}", mv, self.fen());
+                continue;
             }
+            count += child.perft(depth-1);
         }
 
         count
     }
 
-    pub fn split_perft(&self, depth: i32) {
-        let moves = self.gen_psuedolegal_moves();
+    pub fn split_perft(&self, depth: i32) -> usize {
+        let moves = self.gen_legal_moves();
 
         let mut total = 0;
 
         for mv in moves {
             let child = self.make_move(mv);
 
-            if child.checked(self.stm) {
+            if !child.checked(self.stm).is_none() {
                 continue;
             }
 
@@ -400,6 +435,8 @@ impl Position {
         }
         
         println!("total: {}", total);
+
+        total
     }
 
     #[allow(unused)]
@@ -828,5 +865,46 @@ impl Iterator for BitboardIterator {
         } else {
             None
         }
+    }
+}
+
+fn line_between_diagonal(a: Sq, b: Sq) -> (u64, u64) {
+    let l = generated::line_tables::LINE_BETWEEN_DIAGONAL[a.0 as usize][b.0 as usize];
+    (
+        l,
+        l & !(a.bb() | b.bb())
+    )
+}
+
+fn line_between_straight(a: Sq, b: Sq) -> (u64, u64) {
+    let l = generated::line_tables::LINE_BETWEEN_STRAIGHT[a.0 as usize][b.0 as usize];
+    (
+        l,
+        l & !(a.bb() | b.bb())
+    )
+}
+
+fn line_along(a: Sq, b: Sq) -> u64 {
+    generated::line_tables::LINE_ALONG[a.0 as usize][b.0 as usize]
+}
+
+#[derive(Copy, Clone)]
+pub enum Check {
+    None,
+    Single(Sq),
+    Double
+}
+
+impl Check {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub fn is_single(&self) -> bool {
+        matches!(self, Self::Single(_))
+    }
+
+    pub fn is_double(&self) -> bool {
+        matches!(self, Self::Double)
     }
 }

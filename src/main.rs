@@ -11,5 +11,12 @@ fn main() {
         println!("{}", pos.debug_str());
     }
 
-    pos.split_perft(6);
+    let start = std::time::Instant::now();
+    let nodes = pos.split_perft(6);
+    let end = std::time::Instant::now();
+
+    let elapsed = (end - start).as_secs_f32();
+    let nps = nodes as f32 / elapsed;
+
+    println!("NPS: {:.3}M", nps / 1_000_000.0);
 }

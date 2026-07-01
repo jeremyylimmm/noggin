@@ -8,6 +8,7 @@ const MASK_RANK_8: u64 = 0xff00000000000000;
 
 fn main() {
     generate_sliding_attack_tables();
+    generate_line_between_table();
 }
 
 fn slide<F: Fn(u64) -> u64>(mut cur: u64, f: F, blockers: u64) -> u64 {
@@ -75,14 +76,46 @@ fn find_magic(mask: u64) -> u64 {
     }
 }
 
+fn slide_left(bb: u64) -> u64 {
+    (bb >> 1) & !MASK_FILE_H
+}
+
+fn slide_right(bb: u64) -> u64 {
+    (bb << 1) & !MASK_FILE_A
+}
+
+fn slide_up(bb: u64) -> u64 {
+    bb << 8
+}
+
+fn slide_down(bb: u64) -> u64 {
+    bb >> 8
+}
+
+fn slide_left_up(bb: u64) -> u64 {
+    (bb << 7) & !MASK_FILE_H
+}
+
+fn slide_right_up(bb: u64) -> u64 {
+    (bb << 9) & !MASK_FILE_A
+}
+
+fn slide_right_down(bb: u64) -> u64 {
+    (bb >> 7) & !MASK_FILE_A
+}
+
+fn slide_left_down(bb: u64) -> u64 {
+    (bb >> 9) & !MASK_FILE_H
+}
+
 fn rook_mask(sq: usize) -> u64 {
-    let cur = 1u64 << sq;
+    let cur = to_bb(sq);
 
-    let left = slide(cur, |bb| (bb >> 1) & !MASK_FILE_H, 0);
-    let right = slide(cur, |bb| (bb << 1) & !MASK_FILE_A, 0);
+    let left = slide(cur, slide_left, 0);
+    let right = slide(cur, slide_right, 0);
 
-    let up = slide(cur, |bb| bb << 8, 0);
-    let down = slide(cur, |bb| bb >> 8, 0);
+    let up = slide(cur, slide_up, 0);
+    let down = slide(cur, slide_down, 0);
 
     let mut hor = left | right;
     let mut ver = up | down;
@@ -94,24 +127,24 @@ fn rook_mask(sq: usize) -> u64 {
 }
 
 fn rook_attacks(sq: usize, blockers: u64) -> u64 {
-    let cur = 1u64 << sq;
+    let cur = to_bb(sq);
 
-    let left = slide(cur, |bb| (bb >> 1) & !MASK_FILE_H, blockers);
-    let right = slide(cur, |bb| (bb << 1) & !MASK_FILE_A, blockers);
+    let left = slide(cur, slide_left, blockers);
+    let right = slide(cur, slide_right, blockers);
 
-    let up = slide(cur, |bb| bb << 8, blockers);
-    let down = slide(cur, |bb| bb >> 8, blockers);
+    let up = slide(cur, slide_up, blockers);
+    let down = slide(cur, slide_down, blockers);
 
     left | right | up | down
 }
 
 fn bishop_attacks(sq: usize, blockers: u64) -> u64 {
-    let cur = 1u64 << sq;
+    let cur = to_bb(sq);
 
-    let left_up = slide(cur, |bb| (bb << 7) & !MASK_FILE_H, blockers);
-    let right_up = slide(cur, |bb| (bb << 9) & !MASK_FILE_A, blockers);
-    let right_down = slide(cur, |bb| (bb >> 7) & !MASK_FILE_A, blockers);
-    let left_down = slide(cur, |bb| (bb >> 9) & !MASK_FILE_H, blockers);
+    let left_up = slide(cur, slide_left_up, blockers);
+    let right_up = slide(cur, slide_right_up, blockers);
+    let right_down = slide(cur, slide_right_down, blockers);
+    let left_down = slide(cur, slide_left_down, blockers);
 
     left_up | right_up | right_down | left_down
 }
@@ -234,5 +267,85 @@ impl PCG32 {
 
     fn next64(&mut self) -> u64 {
         return (self.next32() as u64) | (self.next32() as u64) << 32;
+    }
+}
+
+fn to_bb(sq: usize) -> u64 {
+    1u64 << sq
+}
+
+fn generate_line_between_table() {
+    let mut file = std::fs::File::create("src/generated/line_tables.rs").unwrap();
+
+    for from in 0..64 {
+        let mut table_diagonal = [0;64];
+        let mut table_straight = [0;64];
+
+        let mut table_along = [0;64];
+
+        for to in 0..64 {
+            let rank_diff: i32 = ((to >> 3) & 7) - ((from >> 3) & 7);
+            let file_diff: i32 = (to & 7) - (from & 7);
+
+            let start = to_bb(from as _);
+            let end = to_bb(to as _);
+
+            match (rank_diff, file_diff) {
+                (x, 0) if x > 0 => {
+                    table_straight[to as usize] = slide(start, slide_up, end) | start;
+                    table_along[to as usize] = slide(start, slide_up, 0) | start | slide(start, slide_down, 0);
+                },
+                (x, 0) if x < 0 => {
+                    table_straight[to as usize] = slide(start, slide_down, end) | start;
+                    table_along[to as usize] = slide(start, slide_down, 0) | start | slide(start, slide_up, 0);
+                },
+                (0, x) if x > 0 => {
+                    table_straight[to as usize] = slide(start, slide_right, end) | start;
+                    table_along[to as usize] = slide(start, slide_right, 0) | start | slide(start, slide_left, 0);
+                },
+                (0, x) if x < 0 => {
+                    table_straight[to as usize] = slide(start, slide_left, end) | start;
+                    table_along[to as usize] = slide(start, slide_left, 0) | start | slide(start, slide_right, 0);
+                },
+
+                (x, y) if x.abs() == y.abs() && x != 0 && y != 0 => {
+                    match (x.signum(), y.signum()) {
+                        ( 1, -1) => {
+                            table_diagonal[to as usize] = slide(start, slide_left_up, end) | start;
+                            table_along[to as usize] = slide(start, slide_left_up, 0) | start | slide(start, slide_right_down, 0);
+                        },
+                        ( 1,  1) => {
+                            table_diagonal[to as usize] = slide(start, slide_right_up, end) | start;
+                            table_along[to as usize] = slide(start, slide_right_up, 0) | start | slide(start, slide_left_down, 0);
+                        },
+                        (-1, -1) => {
+                            table_diagonal[to as usize] = slide(start, slide_left_down, end) | start;
+                            table_along[to as usize] = slide(start, slide_left_down, 0) | start | slide(start, slide_right_up, 0);
+                        },
+                        (-1,  1) => {
+                            table_diagonal[to as usize] = slide(start, slide_right_down, end) | start;
+                            table_along[to as usize] = slide(start, slide_right_down, 0) | start | slide(start, slide_left_up, 0);
+                        },
+                        _ => panic!("unreachable") 
+                    }
+                },
+
+                _ => {}
+            }
+        }
+
+        write_table(&mut file, &format!("LINE_BETWEEN_DIAGONAL_FROM_SQ_{}", from), "u64", &table_diagonal);
+        write_table(&mut file, &format!("LINE_BETWEEN_STRAIGHT_FROM_SQ_{}", from), "u64", &table_straight);
+        write_table(&mut file, &format!("LINE_ALONG_FROM_SQ_{}", from), "u64", &table_along);
+    }
+
+    for which in ["BETWEEN_DIAGONAL", "BETWEEN_STRAIGHT", "ALONG"] {
+        write!(file, "pub const LINE_{}: [&[u64; 64]; 64] = [\n", which).unwrap();
+
+        for from in 0..64 {
+            write!(file, "    &LINE_{}_FROM_SQ_{},\n", which, from).unwrap();
+        }
+
+        write!(file, "];\n\n").unwrap();
     }
 }
