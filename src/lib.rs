@@ -2,6 +2,9 @@ mod attacks;
 mod fen;
 mod move_gen;
 
+#[cfg(test)]
+mod test_position;
+
 pub mod generated;
 
 #[allow(unused)]
@@ -99,6 +102,7 @@ pub type Board = [Option<Piece>; 64];
 #[derive(Copy, Clone)]
 pub struct Move(u16);
 
+#[derive(Clone)]
 pub struct Position {
     bbs: [u64; 12],
     board: Board,
@@ -131,6 +135,228 @@ impl Position {
 
     pub fn gen_psuedolegal_moves(&self) -> MoveList {
         move_gen::gen_psuedolegal(self)
+    }
+
+    pub fn attacked(&self, sq: Sq, attacker: Side) -> bool {
+        let occ = self.occ();
+
+        let pawns = self.bbs.get(Piece::Pawn, attacker);
+
+        if pawns & attacks::pawn_attacks(sq, attacker.opp()) != 0 {
+            return true;
+        }
+
+        let knights = self.bbs.get(Piece::Knight, attacker);
+
+        if knights & attacks::knight_attacks(sq) != 0 {
+            return true;
+        }
+
+        let bishops = self.bbs.get(Piece::Bishop, attacker);
+
+        if bishops & attacks::bishop_attacks(sq, occ) != 0 {
+            return true;
+        }
+
+        let rooks = self.bbs.get(Piece::Rook, attacker);
+
+        if rooks & attacks::rook_attacks(sq, occ) != 0 {
+            return true;
+        }
+
+        let queens = self.bbs.get(Piece::Queen, attacker);
+
+        if queens & attacks::queen_attacks(sq, occ) != 0 {
+            return true;
+        }
+
+        let kings = self.bbs.get(Piece::King, attacker);
+
+        if kings & attacks::king_attacks(sq) != 0 {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn make_move(&self, mv: Move) -> Position {
+        let mut result = self.clone();
+
+        let piece_start = self.board[mv.from()].expect("illegal move");
+        let piece_end = mv.promotion().unwrap_or(piece_start);
+
+        let capture = self.capture(mv);
+
+        *result.bbs.get_mut(piece_start, self.stm) ^= mv.from().bb();
+        result.board[mv.from()] = None;
+
+        if let Some((cap_sq, cap_piece)) = capture {
+            *result.bbs.get_mut(cap_piece, self.stm.opp()) ^= cap_sq.bb();
+            result.board[cap_sq] = None;
+        }
+
+        *result.bbs.get_mut(piece_end, self.stm) ^= mv.to().bb();
+        result.board[mv.to()] = Some(piece_end);
+
+        if let Some((rook_from, rook_to)) = self.castle(mv) {
+            *result.bbs.get_mut(Piece::Rook, self.stm) ^= rook_from.bb() | rook_to.bb();
+            result.board[rook_from] = None;
+            result.board[rook_to] = Some(Piece::Rook);
+        }
+
+        if piece_start == Piece::King {
+            result.castle_rights &=
+                !(self.stm.king_castle_rights_flag() | self.stm.queen_castle_rights_flag());
+        } else if piece_start == Piece::Rook {
+            match (
+                mv.from().file(),
+                self.has_king_castle_rights(self.stm),
+                self.has_queen_castle_rights(self.stm),
+            ) {
+                (7, true, _) if mv.from().rank() == self.stm.home_rank() => {
+                    result.castle_rights &= !self.stm.king_castle_rights_flag();
+                }
+
+                (0, _, true) if mv.from().rank() == self.stm.home_rank() => {
+                    result.castle_rights &= !self.stm.queen_castle_rights_flag();
+                }
+
+                _ => {}
+            }
+        }
+
+        match (
+            capture,
+            self.has_king_castle_rights(self.stm.opp()),
+            self.has_queen_castle_rights(self.stm.opp()),
+        ) {
+            (Some((sq, Piece::Rook)), true, _)
+                if sq.file() == 7 && sq.rank() == self.stm.opp().home_rank() =>
+            {
+                result.castle_rights &= !self.stm.opp().king_castle_rights_flag();
+            }
+
+            (Some((sq, Piece::Rook)), _, true)
+                if sq.file() == 0 && sq.rank() == self.stm.opp().home_rank() =>
+            {
+                result.castle_rights &= !self.stm.opp().queen_castle_rights_flag();
+            }
+
+            _ => {}
+        }
+
+        result.ep = if piece_start == Piece::Pawn && mv.from().rank().abs_diff(mv.to().rank()) > 1 {
+            Some(Sq(mv.to().0 ^ 0b001000))
+        }
+        else {
+            None
+        };
+
+        if piece_start == Piece::Pawn || capture.is_some() {
+            result.halfmove_clock = 0;
+        }
+        else {
+            result.halfmove_clock += 1;
+        }
+
+        if self.stm == Side::Black {
+            result.fullmoves += 1;
+        }
+
+        result.stm = result.stm.opp();
+
+        result
+    }
+
+    fn capture(&self, mv: Move) -> Option<(Sq, Piece)> {
+        if let Some(p) = self.board[mv.to()] {
+            Some((mv.to(), p))
+        } else if self.board[mv.from()].expect("illegal move") == Piece::Pawn
+            && mv.to().file() != mv.from().file()
+        {
+            let sq = Sq((mv.to().0 ^ 0b001000) as _);
+            let p = self.board[sq].expect("pawn moved diagonally but captured nothing");
+            Some((sq, p))
+        } else {
+            None
+        }
+    }
+
+    fn castle(&self, mv: Move) -> Option<(Sq, Sq)> {
+        if self.board[mv.from()].expect("illegal move") != Piece::King {
+            return None
+        }
+
+        if mv.from().file().abs_diff(mv.to().file()) <= 1 {
+            return None;
+        }
+
+        let (rook_from_file, rook_to_file) = match mv.to().file() {
+            6 => (7, 5),
+            2 => (0, 3),
+            _ => panic!("illegal castle"),
+        };
+
+        let rank = mv.to().rank();
+
+        Some((
+            Sq::from_coords(rank, rook_from_file),
+            Sq::from_coords(rank, rook_to_file),
+        ))
+    }
+
+    fn checked(&self, side: Side) -> bool {
+        let king_sq = Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _);
+        self.attacked(king_sq, side.opp())
+    }
+
+    fn has_king_castle_rights(&self, side: Side) -> bool {
+        self.castle_rights & side.king_castle_rights_flag() != 0
+    }
+
+    fn has_queen_castle_rights(&self, side: Side) -> bool {
+        self.castle_rights & side.queen_castle_rights_flag() != 0
+    }
+
+    pub fn perft(&self, depth: i32) -> usize {
+        if depth <= 0 {
+            return 1;
+        }
+
+        let moves = self.gen_psuedolegal_moves();
+
+        let mut count = 0;
+
+        for mv in moves {
+            let child = self.make_move(mv);
+            if !child.checked(self.stm) {
+                count += child.perft(depth-1);
+            }
+        }
+
+        count
+    }
+
+    pub fn split_perft(&self, depth: i32) {
+        let moves = self.gen_psuedolegal_moves();
+
+        let mut total = 0;
+
+        for mv in moves {
+            let child = self.make_move(mv);
+
+            if child.checked(self.stm) {
+                continue;
+            }
+
+            let n = child.perft(depth - 1);
+
+            println!("{}: {}", mv, n);
+
+            total += n;
+        }
+        
+        println!("total: {}", total);
     }
 
     #[allow(unused)]
@@ -190,6 +416,7 @@ impl Position {
         .unwrap();
         write!(result, "Halfmove clock: {}\n", self.halfmove_clock).unwrap();
         write!(result, "Fullmoves: {}\n", self.fullmoves).unwrap();
+        write!(result, "FEN: {}\n", self.fen()).unwrap();
 
         result
     }
@@ -301,51 +528,100 @@ impl Piece {
 }
 
 impl Side {
-    fn id(&self) -> usize {
+    pub fn id(&self) -> usize {
         *self as usize
     }
 
-    fn char(&self) -> char {
+    pub fn king_castle_rights_flag(&self) -> CastleRights {
+        match self {
+            Side::White => CASTLE_RIGHT_K_WHITE,
+            Side::Black => CASTLE_RIGHT_K_BLACK,
+        }
+    }
+
+    pub fn queen_castle_rights_flag(&self) -> CastleRights {
+        match self {
+            Side::White => CASTLE_RIGHT_Q_WHITE,
+            Side::Black => CASTLE_RIGHT_Q_BLACK,
+        }
+    }
+
+    pub fn char(&self) -> char {
         match self {
             Side::White => 'w',
             Side::Black => 'b',
         }
     }
 
-    fn sign(&self) -> i32 {
+    pub fn sign(&self) -> i32 {
         match self {
             Side::White => 1,
             Side::Black => -1,
         }
     }
 
-    fn home_rank(&self) -> usize {
+    pub fn home_rank(&self) -> usize {
         match self {
             Side::White => 0,
             Side::Black => 7,
         }
     }
 
-    fn pawn_rank(&self) -> usize {
+    pub fn pawn_rank(&self) -> usize {
         match self {
             Side::White => 1,
             Side::Black => 6,
         }
     }
 
-    fn opp(&self) -> Side {
+    pub fn opp(&self) -> Side {
         match self {
             Side::White => Side::Black,
             Side::Black => Side::White,
         }
     }
 
-    fn promotion_rank(&self) -> usize {
+    pub fn promotion_rank(&self) -> usize {
         self.opp().home_rank()
     }
 }
 
 impl Move {
+    pub fn from_uci(uci: &str) -> Option<Self> {
+        let mut chars = uci.chars();
+
+        let f0 = chars.next()?;
+        let r0 = chars.next()?;
+
+        let f1 = chars.next()?;
+        let r1 = chars.next()?;
+
+        let from = Sq::from_san(&format!("{}{}", f0, r0))?;
+        let to = Sq::from_san(&format!("{}{}", f1, r1))?;
+
+        let prom = if let Some(p) = chars.next() {
+            Some(match p {
+                'n' => Piece::Knight,
+                'b' => Piece::Bishop,
+                'r' => Piece::Rook,
+                'q' => Piece::Queen,
+                _ => return None
+            })
+        }
+        else {
+            None
+        };
+
+        if chars.next().is_some() {
+            None
+        }
+        else {
+            Some(
+                Self::new(from, to, prom)
+            )
+        }
+    }
+
     pub fn new(from: Sq, to: Sq, promotion: Option<Piece>) -> Self {
         match promotion {
             None | Some(Piece::Knight | Piece::Bishop | Piece::Rook | Piece::Queen) => (),
@@ -355,9 +631,9 @@ impl Move {
         }
 
         Self(
-            0 | (from.0 as u16)
+            (from.0 as u16)
                 | (to.0 as u16) << 6
-                | (promotion.map(|x| x.id() as u16 + 1).unwrap_or(0)) << 12,
+                | (promotion.map(|x| x.id() as u16 + 1).unwrap_or(0)) << 12
         )
     }
 

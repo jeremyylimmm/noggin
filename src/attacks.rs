@@ -3,7 +3,10 @@ use crate::*;
 use crate::generated::sliding_attacks;
 
 pub fn pawn_pushes(pawns: u64, occ: u64, side: Side) -> u64 {
-    (pawns << (8 * side.sign())) & !occ
+    match side {
+        Side::White =>  (pawns << 8) & !occ,
+        Side::Black =>  (pawns >> 8) & !occ,
+    }
 }
 
 pub fn pawn_double_pushes(pawns: u64, occ: u64, side: Side) -> u64 {
@@ -25,6 +28,45 @@ pub fn pawn_captures_left_black(pawns: u64, opp_occ: u64) -> (u64, i32) {
 
 pub fn pawn_captures_right_black(pawns: u64, opp_occ: u64) -> (u64, i32) {
     ((pawns >> 7) & opp_occ & !MASK_FILE_A, -7)
+}
+
+const PAWN_ATTACKS_WHITE: [u64; 64] = {
+    let mut table = [0u64; _];
+
+    let mut sq = Sq(0);
+
+    while sq.0 < 64 {
+        let base = sq.bb();
+
+        table[sq.0 as usize] = 0 | (base << 7) & !MASK_FILE_H | (base << 9) & !MASK_FILE_A;
+
+        sq.0 += 1;
+    }
+
+    table
+};
+
+const PAWN_ATTACKS_BLACK: [u64; 64] = {
+    let mut table = [0u64; _];
+
+    let mut sq = Sq(0);
+
+    while sq.0 < 64 {
+        let base = sq.bb();
+
+        table[sq.0 as usize] = 0 | (base >> 9) & !MASK_FILE_H | (base >> 7) & !MASK_FILE_A;
+
+        sq.0 += 1;
+    }
+
+    table
+};
+
+pub fn pawn_attacks(sq: Sq, side: Side) -> u64 {
+    match side {
+        Side::White => PAWN_ATTACKS_WHITE[sq.0 as usize],
+        Side::Black => PAWN_ATTACKS_BLACK[sq.0 as usize],
+    }
 }
 
 const KING_ATTACKS: [u64; 64] = {
@@ -75,8 +117,16 @@ const KNIGHT_ATTACKS: [u64; 64] = {
     table
 };
 
+pub fn king_attacks(sq: Sq) -> u64 {
+    KING_ATTACKS[sq.0 as usize]
+}
+
 pub fn king_moves(sq: Sq, allies: u64) -> u64 {
-    KING_ATTACKS[sq.0 as usize] & !allies
+    king_attacks(sq) & !allies
+}
+
+pub fn knight_attacks(sq: Sq) -> u64 {
+    KNIGHT_ATTACKS[sq.0 as usize]
 }
 
 pub fn knight_moves(sq: Sq, allies: u64) -> u64 {
@@ -119,6 +169,10 @@ pub fn bishop_moves(sq: Sq, occ: u64, allies: u64) -> u64 {
     bishop_attacks(sq, occ) & !allies
 }
 
+pub fn queen_attacks(sq: Sq, occ: u64) -> u64 {
+    bishop_attacks(sq, occ) | rook_attacks(sq, occ)
+}
+
 pub fn queen_moves(sq: Sq, occ: u64, allies: u64) -> u64 {
-    (bishop_attacks(sq, occ) | rook_attacks(sq, occ)) & !allies
+    queen_attacks(sq, occ) & !allies
 }

@@ -2,6 +2,12 @@ use crate::*;
 
 use attacks::*;
 
+const MASK_KING_CASTLE_PATH: u64 = MASK_FILE_F | MASK_FILE_G;
+const MASK_QUEEN_CASTLE_PATH: u64 = MASK_FILE_C | MASK_FILE_D;
+
+const MASK_KING_CASTLE_EMPTY: u64 = MASK_FILE_F | MASK_FILE_G;
+const MASK_QUEEN_CASTLE_EMPTY: u64 = MASK_FILE_B | MASK_FILE_C | MASK_FILE_D;
+
 pub fn gen_psuedolegal(pos: &Position) -> MoveList {
     let mut moves = MoveList::new();
 
@@ -95,6 +101,28 @@ pub fn gen_psuedolegal(pos: &Position) -> MoveList {
     for king in iter_bb(kings) {
         for to in iter_bb(king_moves(king, allies)) {
             moves.push(Move::new(king, to, None));
+        }
+    }
+
+    if !pos.checked(pos.stm) {
+        let king_sq = Sq(kings.trailing_zeros() as _);
+
+        if pos.has_king_castle_rights(pos.stm)
+            && occ & (MASK_KING_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
+            && !iter_bb(MASK_KING_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()])
+                .any(|sq| pos.attacked(sq, pos.stm.opp()))
+        {
+            let to = Sq::from_coords(king_sq.rank(), 6);
+            moves.push(Move::new(king_sq, to, None));
+        }
+
+        if pos.has_queen_castle_rights(pos.stm)
+            && occ & (MASK_QUEEN_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
+            && !iter_bb(MASK_QUEEN_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()])
+                .any(|sq| pos.attacked(sq, pos.stm.opp()))
+        {
+            let to = Sq::from_coords(king_sq.rank(), 2);
+            moves.push(Move::new(king_sq, to, None));
         }
     }
 
