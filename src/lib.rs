@@ -405,10 +405,6 @@ impl Position {
 
         for mv in moves {
             let child = self.make_move(mv);
-            if !child.checked(self.stm).is_none() {
-                println!("illegal move {}: {}", mv, self.fen());
-                continue;
-            }
             count += child.perft(depth-1);
         }
 
