@@ -2,10 +2,16 @@ mod attacks;
 mod fen;
 mod move_gen;
 
+pub mod eval;
+pub mod search;
+
 #[cfg(test)]
 mod test_position;
 
 pub mod generated;
+
+pub type Score = i32;
+pub const MATE_SCORE: Score = 30_000;
 
 #[allow(unused)]
 pub const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -99,8 +105,12 @@ pub struct Sq(u8);
 
 pub type Board = [Option<Piece>; 64];
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct Move(u16);
+
+impl Move {
+    pub const NULL: Move = Move(0);
+}
 
 #[derive(Clone)]
 pub struct Position {
@@ -937,6 +947,10 @@ pub enum Check {
 impl Check {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
+    }
+
+    pub fn is_some(&self) -> bool {
+        !self.is_none()
     }
 
     pub fn is_single(&self) -> bool {
