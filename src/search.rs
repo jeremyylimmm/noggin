@@ -1,10 +1,16 @@
+use std::sync::*;
+
 use crate::*;
 
 const MAX_PLY: usize = 128;
 
 pub struct Worker {
     pv: [[Move; MAX_PLY]; MAX_PLY],
+
     nodes: usize,
+    stopped: bool,
+
+    stop: Arc<atomic::AtomicBool>,
 }
 
 impl Worker {
@@ -12,6 +18,8 @@ impl Worker {
         Self {
             pv: [[Move::NULL; _]; _],
             nodes: 0,
+            stopped: false,
+            stop: Arc::new(atomic::AtomicBool::new(false)),
         }
     }
 
@@ -26,6 +34,10 @@ impl Worker {
         }
 
         self.nodes += 1;
+
+        if self.check_stop() {
+            return 0;            
+        }
 
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
@@ -47,6 +59,10 @@ impl Worker {
             let child = pos.make_move(mv);
 
             let score = -self.search(&child, ply + 1, depth - 1);
+
+            if self.stopped {
+                return 0;
+            }
 
             if score > best_score {
                 if ply < self.pv.len() {
@@ -73,15 +89,26 @@ impl Worker {
         best_score
     }
 
-    pub fn go(&mut self, pos: &Position) -> Score {
+    pub fn go(&mut self, pos: &Position, stop: Arc<atomic::AtomicBool>) -> Score {
         self.nodes = 0;
+        self.stopped = false;
+        self.stop = stop;
 
         let mut score = 0;
 
         let start = std::time::Instant::now();
 
-        for d in 1..=4 {
+        let mut root_pv = [Move::NULL; MAX_PLY];
+
+        for d in 1.. {
             score = self.search(pos, 0, d);
+
+            if self.stopped {
+                break;
+            }
+
+            let pv = self.pv();
+            root_pv[..pv.len()].copy_from_slice(pv);
 
             let elapsed = (std::time::Instant::now() - start).as_secs_f32();
             let nps = self.nodes as f32 / elapsed;
@@ -102,7 +129,20 @@ impl Worker {
             println!("");
         }
 
+        // so we always have a valid pv
+        self.pv[0] = root_pv;
+
         score
+    }
+
+    fn check_stop(&mut self) -> bool {
+        if self.nodes & 4095 == 0 {
+            if self.stop.load(atomic::Ordering::Relaxed) {
+                self.stopped = true;
+            }
+        }
+
+        return self.stopped;
     }
 }
 
