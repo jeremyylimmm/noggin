@@ -291,6 +291,16 @@ impl Position {
         }
     }
 
+    pub fn is_legal(&self, mv: Move) -> bool {
+        for leg in self.gen_legal_moves() {
+            if leg == mv {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     pub fn pin_ray(&self, sq: Sq) -> u64 {
         if sq.bb() & self.pins != 0 {
             line_along(sq, self.king_sq(self.stm))

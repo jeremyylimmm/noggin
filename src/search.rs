@@ -80,7 +80,7 @@ impl Worker {
 
         let start = std::time::Instant::now();
 
-        for d in 1..=5 {
+        for d in 1..=4 {
             score = self.search(pos, 0, d);
 
             let elapsed = (std::time::Instant::now() - start).as_secs_f32();
