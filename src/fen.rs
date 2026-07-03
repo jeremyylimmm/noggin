@@ -157,10 +157,11 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         halfmove_clock: halfmove_clock as _,
         fullmoves: fullmoves as _,
         threats: 0,
-        pins: 0
+        pins: 0,
+        checkers: 0,
     };
 
-    pos.update_threats_and_pins();
+    pos.update_threats_checkers_and_pins();
 
     Ok(pos)
 }

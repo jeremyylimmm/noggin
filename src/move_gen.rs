@@ -76,12 +76,6 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
             for to in iter_bb(bb) {
                 let cap_sq = Sq((to.0 ^ 0b001000) as _);
 
-                if let Some(checker) = checker {
-                    if cap_sq != checker {
-                        continue;
-                    }
-                }
-
                 let from = Sq((to.0 as i32 - offset) as _);
 
                 let updated_occ = occ ^ (cap_sq.bb() | from.bb() | to.bb());
@@ -191,7 +185,7 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
 }
 
 pub fn gen_legal(pos: &Position) -> MoveList {
-    match pos.checked(pos.stm) {
+    match pos.checked() {
         Check::None => gen_standard(pos, None),
         Check::Single(sq) => gen_standard(pos, Some(sq)),
         Check::Double => gen_evasions(pos),

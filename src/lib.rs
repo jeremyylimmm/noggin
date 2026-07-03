@@ -113,6 +113,7 @@ pub struct Position {
     fullmoves: i16,
     threats: u64,
     pins: u64,
+    checkers: u64,
 }
 
 impl Position {
@@ -143,9 +144,37 @@ impl Position {
         Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _)
     }
 
-    pub fn update_threats_and_pins(&mut self) {
+    pub fn update_threats_checkers_and_pins(&mut self) {
         self.update_threats();
         self.update_pins();
+        self.update_checkers();
+    }
+
+    fn update_checkers(&mut self) {
+        let sq = self.king_sq(self.stm);
+        let attacker = self.stm.opp();
+
+        let occ = self.occ();
+
+        self.checkers = 0;
+
+        let pawns = self.bbs.get(Piece::Pawn, attacker);
+        self.checkers |= pawns & attacks::pawn_attacks(sq.bb(), self.stm);
+
+        let knights = self.bbs.get(Piece::Knight, attacker);
+        self.checkers |= knights & attacks::knight_attacks(sq);
+
+        let bishops = self.bbs.get(Piece::Bishop, attacker);
+        self.checkers |= bishops & attacks::bishop_attacks(sq, occ);
+
+        let rooks = self.bbs.get(Piece::Rook, attacker);
+        self.checkers |= rooks & attacks::rook_attacks(sq, occ);
+
+        let queens = self.bbs.get(Piece::Queen, attacker);
+        self.checkers |= queens & attacks::queen_attacks(sq, occ);
+
+        let kings = self.bbs.get(Piece::King, attacker);
+        self.checkers |= kings & attacks::king_attacks(sq);
     }
 
     fn update_threats(&mut self) {
@@ -220,35 +249,10 @@ impl Position {
         }
     }
 
-    pub fn checked(&self, side: Side) -> Check {
-        let sq = self.king_sq(side);
-        let attacker = side.opp();
-
-        let occ = self.occ();
-
-        let mut checkers = 0;
-
-        let pawns = self.bbs.get(Piece::Pawn, attacker);
-        checkers |= pawns & attacks::pawn_attacks(sq.bb(), side);
-
-        let knights = self.bbs.get(Piece::Knight, attacker);
-        checkers |= knights & attacks::knight_attacks(sq);
-
-        let bishops = self.bbs.get(Piece::Bishop, attacker);
-        checkers |= bishops & attacks::bishop_attacks(sq, occ);
-
-        let rooks = self.bbs.get(Piece::Rook, attacker);
-        checkers |= rooks & attacks::rook_attacks(sq, occ);
-
-        let queens = self.bbs.get(Piece::Queen, attacker);
-        checkers |= queens & attacks::queen_attacks(sq, occ);
-
-        let kings = self.bbs.get(Piece::King, attacker);
-        checkers |= kings & attacks::king_attacks(sq);
-
-        match checkers.count_ones() {
+    pub fn checked(&self) -> Check {
+        match self.checkers.count_ones() {
             0 => Check::None,
-            1 => Check::Single(Sq(checkers.trailing_zeros() as _)),
+            1 => Check::Single(Sq(self.checkers.trailing_zeros() as _)),
             _ => Check::Double
         }
     }
@@ -340,7 +344,7 @@ impl Position {
 
         result.stm = result.stm.opp();
 
-        result.update_threats_and_pins();
+        result.update_threats_checkers_and_pins();
 
         result
     }
@@ -419,7 +423,7 @@ impl Position {
         for mv in moves {
             let child = self.make_move(mv);
 
-            if !child.checked(self.stm).is_none() {
+            if !child.checked().is_none() {
                 continue;
             }
 
