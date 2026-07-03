@@ -161,7 +161,7 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         checkers: 0,
     };
 
-    pos.update_threats_checkers_and_pins();
+    pos.update_threats_checkers_ep_and_pins();
 
     Ok(pos)
 }

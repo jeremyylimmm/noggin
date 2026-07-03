@@ -144,10 +144,49 @@ impl Position {
         Sq(self.bbs.get(Piece::King, side).trailing_zeros() as _)
     }
 
-    pub fn update_threats_checkers_and_pins(&mut self) {
+    pub fn update_threats_checkers_ep_and_pins(&mut self) {
         self.update_threats();
         self.update_pins();
         self.update_checkers();
+        self.update_ep();
+    }
+
+    fn ep_legal(&self, cap_sq: Sq, from: Sq, to: Sq) -> bool {
+        let updated_occ = self.occ() ^ (cap_sq.bb() | from.bb() | to.bb());
+        let king_sq = self.king_sq(self.stm);
+
+        let rook_attacks = attacks::rook_attacks(king_sq, updated_occ);
+        let bishop_attacks = attacks::bishop_attacks(king_sq, updated_occ);
+        let queen_attacks = rook_attacks | bishop_attacks;
+
+        let legal = rook_attacks & self.bbs.get(Piece::Rook, self.stm.opp()) == 0
+            && bishop_attacks & self.bbs.get(Piece::Bishop, self.stm.opp()) == 0
+            && queen_attacks & self.bbs.get(Piece::Queen, self.stm.opp()) == 0;
+
+        legal
+    }
+
+    fn update_ep(&mut self) {
+        if let Some(ep_sq) = self.ep {
+            let ep_mask = ep_sq.bb();
+
+            let pawns = self.bbs.get(Piece::Pawn, self.stm);
+            let left_ep = attacks::pawn_captures_left(pawns, ep_mask, self.stm);
+            let right_ep = attacks::pawn_captures_right(pawns, ep_mask, self.stm);
+
+            for (bb, offset) in [left_ep, right_ep] {
+                for to in iter_bb(bb) {
+                    let cap_sq = Sq((to.0 ^ 0b001000) as _);
+                    let from = Sq((to.0 as i32 - offset) as _);
+
+                    if self.ep_legal(cap_sq, from, to) {
+                        return;
+                    }
+                }
+            }
+
+            self.ep = None; // no legal en passants - remove the flag
+        }
     }
 
     fn update_checkers(&mut self) {
@@ -344,7 +383,7 @@ impl Position {
 
         result.stm = result.stm.opp();
 
-        result.update_threats_checkers_and_pins();
+        result.update_threats_checkers_ep_and_pins();
 
         result
     }

@@ -75,20 +75,9 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
         for (bb, offset) in [left_ep, right_ep] {
             for to in iter_bb(bb) {
                 let cap_sq = Sq((to.0 ^ 0b001000) as _);
-
                 let from = Sq((to.0 as i32 - offset) as _);
 
-                let updated_occ = occ ^ (cap_sq.bb() | from.bb() | to.bb());
-
-                let rook_attacks = attacks::rook_attacks(king_sq, updated_occ);
-                let bishop_attacks = attacks::bishop_attacks(king_sq, updated_occ);
-                let queen_attacks = rook_attacks | bishop_attacks;
-
-                let legal = rook_attacks & pos.bbs.get(Piece::Rook, pos.stm.opp()) == 0
-                    && bishop_attacks & pos.bbs.get(Piece::Bishop, pos.stm.opp()) == 0
-                    && queen_attacks & pos.bbs.get(Piece::Queen, pos.stm.opp()) == 0;
-
-                if legal {
+                if pos.ep_legal(cap_sq, from, to) {
                     moves.push(Move::new(from, to, None));
                 }
             }
