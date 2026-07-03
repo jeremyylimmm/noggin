@@ -94,18 +94,20 @@ impl Worker {
         self.stopped = false;
         self.stop = stop;
 
-        let mut score = 0;
 
         let start = std::time::Instant::now();
 
+        let mut root_score = 0;
         let mut root_pv = [Move::NULL; MAX_PLY];
 
         for d in 1.. {
-            score = self.search(pos, 0, d);
+            let score = self.search(pos, 0, d);
 
             if self.stopped {
                 break;
             }
+
+            root_score = score;
 
             let pv = self.pv();
             root_pv[..pv.len()].copy_from_slice(pv);
@@ -132,7 +134,7 @@ impl Worker {
         // so we always have a valid pv
         self.pv[0] = root_pv;
 
-        score
+        root_score
     }
 
     fn check_stop(&mut self) -> bool {
