@@ -4,19 +4,19 @@ const MAX_PLY: usize = 128;
 
 pub struct Worker {
     pv: [[Move; MAX_PLY]; MAX_PLY],
-    nodes: usize
+    nodes: usize,
 }
 
 impl Worker {
     pub fn new() -> Self {
         Self {
-            pv: [[Move::NULL; _];_],
-            nodes: 0
+            pv: [[Move::NULL; _]; _],
+            nodes: 0,
         }
     }
 
     pub fn pv(&self) -> &[Move] {
-        let len = self.pv[0].iter().take_while(|&x|*x != Move::NULL).count();
+        let len = self.pv[0].iter().take_while(|&x| *x != Move::NULL).count();
         &self.pv[0][..len]
     }
 
@@ -36,8 +36,7 @@ impl Worker {
         if moves.len() == 0 {
             if pos.checked().is_some() {
                 return -MATE_SCORE + (ply as Score);
-            }
-            else {
+            } else {
                 return 0;
             }
         }
@@ -54,17 +53,15 @@ impl Worker {
                     self.pv[ply][0] = mv;
 
                     if (ply + 1) < self.pv.len() {
-                        for i in 0..(self.pv[ply+1].len()-1)
-                        {
-                            let x = self.pv[ply+1][i];
-                            self.pv[ply][i+1] = x;
+                        for i in 0..(self.pv[ply + 1].len() - 1) {
+                            let x = self.pv[ply + 1][i];
+                            self.pv[ply][i + 1] = x;
 
                             if x == Move::NULL {
                                 break;
                             }
                         }
-                    }
-                    else {
+                    } else {
                         self.pv[ply][1] = Move::NULL;
                     }
                 }
@@ -89,7 +86,14 @@ impl Worker {
             let elapsed = (std::time::Instant::now() - start).as_secs_f32();
             let nps = self.nodes as f32 / elapsed;
 
-            print!("info depth {} score {} nodes {} nps {} time {} pv", d, score, self.nodes, nps as i32, (elapsed * 1000.0) as i32);
+            print!(
+                "info depth {} score {} nodes {} nps {} time {} pv",
+                d,
+                score,
+                self.nodes,
+                nps as i32,
+                (elapsed * 1000.0) as i32
+            );
 
             for mv in self.pv() {
                 print!(" {}", mv);

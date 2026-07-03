@@ -273,14 +273,16 @@ impl Position {
         let candidates: [(Piece, LineFn); 3] = [
             (Piece::Bishop, |a, b| line_between_diagonal(a, b).1),
             (Piece::Rook, |a, b| line_between_straight(a, b).1),
-            (Piece::Queen, |a, b| line_between_diagonal(a, b).1 | line_between_straight(a, b).1),
+            (Piece::Queen, |a, b| {
+                line_between_diagonal(a, b).1 | line_between_straight(a, b).1
+            }),
         ];
 
         for (p, line) in candidates {
             let bb = self.bbs.get(p, self.stm.opp());
 
             for from in iter_bb(bb) {
-                let between= line(from, king_sq);
+                let between = line(from, king_sq);
                 let mask = occ & between;
                 if mask.count_ones() == 1 {
                     self.pins |= mask;
@@ -292,8 +294,7 @@ impl Position {
     pub fn pin_ray(&self, sq: Sq) -> u64 {
         if sq.bb() & self.pins != 0 {
             line_along(sq, self.king_sq(self.stm))
-        }
-        else {
+        } else {
             u64::MAX
         }
     }
@@ -302,7 +303,7 @@ impl Position {
         match self.checkers.count_ones() {
             0 => Check::None,
             1 => Check::Single(Sq(self.checkers.trailing_zeros() as _)),
-            _ => Check::Double
+            _ => Check::Double,
         }
     }
 
@@ -375,15 +376,13 @@ impl Position {
 
         result.ep = if piece_start == Piece::Pawn && mv.from().rank().abs_diff(mv.to().rank()) > 1 {
             Some(Sq(mv.to().0 ^ 0b001000))
-        }
-        else {
+        } else {
             None
         };
 
         if piece_start == Piece::Pawn || capture.is_some() {
             result.halfmove_clock = 0;
-        }
-        else {
+        } else {
             result.halfmove_clock += 1;
         }
 
@@ -414,7 +413,7 @@ impl Position {
 
     fn castle(&self, mv: Move) -> Option<(Sq, Sq)> {
         if self.board[mv.from()].expect("illegal move") != Piece::King {
-            return None
+            return None;
         }
 
         if mv.from().file().abs_diff(mv.to().file()) <= 1 {
@@ -458,7 +457,7 @@ impl Position {
 
         for mv in moves {
             let child = self.make_move(mv);
-            count += child.perft(depth-1);
+            count += child.perft(depth - 1);
         }
 
         count
@@ -482,7 +481,7 @@ impl Position {
 
             total += n;
         }
-        
+
         println!("total: {}", total);
 
         total
@@ -734,20 +733,16 @@ impl Move {
                 'b' => Piece::Bishop,
                 'r' => Piece::Rook,
                 'q' => Piece::Queen,
-                _ => return None
+                _ => return None,
             })
-        }
-        else {
+        } else {
             None
         };
 
         if chars.next().is_some() {
             None
-        }
-        else {
-            Some(
-                Self::new(from, to, prom)
-            )
+        } else {
+            Some(Self::new(from, to, prom))
         }
     }
 
@@ -762,7 +757,7 @@ impl Move {
         Self(
             (from.0 as u16)
                 | (to.0 as u16) << 6
-                | (promotion.map(|x| x.id() as u16 + 1).unwrap_or(0)) << 12
+                | (promotion.map(|x| x.id() as u16 + 1).unwrap_or(0)) << 12,
         )
     }
 
@@ -919,18 +914,12 @@ impl Iterator for BitboardIterator {
 
 fn line_between_diagonal(a: Sq, b: Sq) -> (u64, u64) {
     let l = generated::line_tables::LINE_BETWEEN_DIAGONAL[a.0 as usize][b.0 as usize];
-    (
-        l,
-        l & !(a.bb() | b.bb())
-    )
+    (l, l & !(a.bb() | b.bb()))
 }
 
 fn line_between_straight(a: Sq, b: Sq) -> (u64, u64) {
     let l = generated::line_tables::LINE_BETWEEN_STRAIGHT[a.0 as usize][b.0 as usize];
-    (
-        l,
-        l & !(a.bb() | b.bb())
-    )
+    (l, l & !(a.bb() | b.bb()))
 }
 
 fn line_along(a: Sq, b: Sq) -> u64 {
@@ -941,7 +930,7 @@ fn line_along(a: Sq, b: Sq) -> u64 {
 pub enum Check {
     None,
     Single(Sq),
-    Double
+    Double,
 }
 
 impl Check {

@@ -37,8 +37,7 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
 
     let legality_mask = if let Some(sq) = checker {
         sq.bb() | line_between_diagonal(king_sq, sq).0 | line_between_straight(king_sq, sq).0
-    }
-    else {
+    } else {
         u64::MAX
     };
 

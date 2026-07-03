@@ -4,8 +4,8 @@ use crate::generated::sliding_attacks;
 
 pub fn pawn_pushes(pawns: u64, occ: u64, side: Side) -> u64 {
     match side {
-        Side::White =>  (pawns << 8) & !occ,
-        Side::Black =>  (pawns >> 8) & !occ,
+        Side::White => (pawns << 8) & !occ,
+        Side::Black => (pawns >> 8) & !occ,
     }
 }
 
@@ -30,18 +30,12 @@ pub fn pawn_attacks_right(pawns: u64, side: Side) -> (u64, i32) {
 
 pub fn pawn_captures_left(pawns: u64, opp_occ: u64, side: Side) -> (u64, i32) {
     let (bb, offset) = pawn_attacks_left(pawns, side);
-    (
-        bb & opp_occ,
-        offset
-    )
+    (bb & opp_occ, offset)
 }
 
 pub fn pawn_captures_right(pawns: u64, opp_occ: u64, side: Side) -> (u64, i32) {
     let (bb, offset) = pawn_attacks_right(pawns, side);
-    (
-        bb & opp_occ,
-        offset
-    )
+    (bb & opp_occ, offset)
 }
 
 pub fn pawn_attacks(pawns: u64, side: Side) -> u64 {

@@ -278,10 +278,10 @@ fn generate_line_between_table() {
     let mut file = std::fs::File::create("src/generated/line_tables.rs").unwrap();
 
     for from in 0..64 {
-        let mut table_diagonal = [0;64];
-        let mut table_straight = [0;64];
+        let mut table_diagonal = [0; 64];
+        let mut table_straight = [0; 64];
 
-        let mut table_along = [0;64];
+        let mut table_along = [0; 64];
 
         for to in 0..64 {
             let rank_diff: i32 = ((to >> 3) & 7) - ((from >> 3) & 7);
@@ -293,50 +293,79 @@ fn generate_line_between_table() {
             match (rank_diff, file_diff) {
                 (x, 0) if x > 0 => {
                     table_straight[to as usize] = slide(start, slide_up, end) | start;
-                    table_along[to as usize] = slide(start, slide_up, 0) | start | slide(start, slide_down, 0);
-                },
+                    table_along[to as usize] =
+                        slide(start, slide_up, 0) | start | slide(start, slide_down, 0);
+                }
                 (x, 0) if x < 0 => {
                     table_straight[to as usize] = slide(start, slide_down, end) | start;
-                    table_along[to as usize] = slide(start, slide_down, 0) | start | slide(start, slide_up, 0);
-                },
+                    table_along[to as usize] =
+                        slide(start, slide_down, 0) | start | slide(start, slide_up, 0);
+                }
                 (0, x) if x > 0 => {
                     table_straight[to as usize] = slide(start, slide_right, end) | start;
-                    table_along[to as usize] = slide(start, slide_right, 0) | start | slide(start, slide_left, 0);
-                },
+                    table_along[to as usize] =
+                        slide(start, slide_right, 0) | start | slide(start, slide_left, 0);
+                }
                 (0, x) if x < 0 => {
                     table_straight[to as usize] = slide(start, slide_left, end) | start;
-                    table_along[to as usize] = slide(start, slide_left, 0) | start | slide(start, slide_right, 0);
-                },
+                    table_along[to as usize] =
+                        slide(start, slide_left, 0) | start | slide(start, slide_right, 0);
+                }
 
                 (x, y) if x.abs() == y.abs() && x != 0 && y != 0 => {
                     match (x.signum(), y.signum()) {
-                        ( 1, -1) => {
+                        (1, -1) => {
                             table_diagonal[to as usize] = slide(start, slide_left_up, end) | start;
-                            table_along[to as usize] = slide(start, slide_left_up, 0) | start | slide(start, slide_right_down, 0);
-                        },
-                        ( 1,  1) => {
+                            table_along[to as usize] = slide(start, slide_left_up, 0)
+                                | start
+                                | slide(start, slide_right_down, 0);
+                        }
+                        (1, 1) => {
                             table_diagonal[to as usize] = slide(start, slide_right_up, end) | start;
-                            table_along[to as usize] = slide(start, slide_right_up, 0) | start | slide(start, slide_left_down, 0);
-                        },
+                            table_along[to as usize] = slide(start, slide_right_up, 0)
+                                | start
+                                | slide(start, slide_left_down, 0);
+                        }
                         (-1, -1) => {
-                            table_diagonal[to as usize] = slide(start, slide_left_down, end) | start;
-                            table_along[to as usize] = slide(start, slide_left_down, 0) | start | slide(start, slide_right_up, 0);
-                        },
-                        (-1,  1) => {
-                            table_diagonal[to as usize] = slide(start, slide_right_down, end) | start;
-                            table_along[to as usize] = slide(start, slide_right_down, 0) | start | slide(start, slide_left_up, 0);
-                        },
-                        _ => panic!("unreachable") 
+                            table_diagonal[to as usize] =
+                                slide(start, slide_left_down, end) | start;
+                            table_along[to as usize] = slide(start, slide_left_down, 0)
+                                | start
+                                | slide(start, slide_right_up, 0);
+                        }
+                        (-1, 1) => {
+                            table_diagonal[to as usize] =
+                                slide(start, slide_right_down, end) | start;
+                            table_along[to as usize] = slide(start, slide_right_down, 0)
+                                | start
+                                | slide(start, slide_left_up, 0);
+                        }
+                        _ => panic!("unreachable"),
                     }
-                },
+                }
 
                 _ => {}
             }
         }
 
-        write_table(&mut file, &format!("LINE_BETWEEN_DIAGONAL_FROM_SQ_{}", from), "u64", &table_diagonal);
-        write_table(&mut file, &format!("LINE_BETWEEN_STRAIGHT_FROM_SQ_{}", from), "u64", &table_straight);
-        write_table(&mut file, &format!("LINE_ALONG_FROM_SQ_{}", from), "u64", &table_along);
+        write_table(
+            &mut file,
+            &format!("LINE_BETWEEN_DIAGONAL_FROM_SQ_{}", from),
+            "u64",
+            &table_diagonal,
+        );
+        write_table(
+            &mut file,
+            &format!("LINE_BETWEEN_STRAIGHT_FROM_SQ_{}", from),
+            "u64",
+            &table_straight,
+        );
+        write_table(
+            &mut file,
+            &format!("LINE_ALONG_FROM_SQ_{}", from),
+            "u64",
+            &table_along,
+        );
     }
 
     for which in ["BETWEEN_DIAGONAL", "BETWEEN_STRAIGHT", "ALONG"] {
