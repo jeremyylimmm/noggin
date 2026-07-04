@@ -7,8 +7,10 @@ use std::sync::{
 };
 
 const MAX_DEPTH: usize = 128;
+const MAX_PV_SIZE: usize = 32;
 
 #[derive(Copy, Clone, PartialEq)]
+#[repr(u8)]
 enum TTKind {
     Exact,
     Upper,
@@ -17,11 +19,11 @@ enum TTKind {
 
 #[derive(Clone)]
 struct TTEntry {
-    hash: u64,
+    id: u16,
+    kind: TTKind,
+    depth: u8,
     mv: Move,
     rel_score: i16,
-    kind: TTKind,
-    depth: i32,
 }
 
 const CONT_HISTORY_PLIES: [usize; 1] = [1];
@@ -38,7 +40,7 @@ const MAX_HISTORY: i16 = 30_000;
 impl TTEntry {
     fn empty() -> Self {
         Self {
-            hash: 0,
+            id: 0,
             mv: NULL_MOVE,
             kind: TTKind::Exact,
             rel_score: 0,
@@ -49,7 +51,7 @@ impl TTEntry {
     fn score(&self, ply: usize) -> i32 {
         let ply = ply as i32;
 
-        if self.rel_score.abs() as i32 > MATE_SCORE - 1000 {
+        if (self.rel_score as i32).is_mate() {
             if self.rel_score > 0 {
                 self.rel_score as i32 - ply
             } else {
@@ -63,18 +65,18 @@ impl TTEntry {
     fn new(hash: u64, mv: Move, kind: TTKind, score: i32, ply: usize, depth: i32) -> Self {
         let ply = ply as i32;
 
-        let rel_score = if score.abs() > MATE_SCORE - 1000 {
+        let rel_score = if score.is_mate() {
             if score > 0 { score + ply } else { score - ply }
         } else {
             score
         } as i16;
 
         Self {
-            hash,
+            id: hash as u16,
             mv,
             kind,
             rel_score,
-            depth,
+            depth: depth.try_into().unwrap(),
         }
     }
 
@@ -115,6 +117,8 @@ struct ContinuationTable {
     data: [[[i16; 64]; 6]; 2],
 }
 
+type Line = [Move; MAX_PV_SIZE];
+
 pub struct Searcher {
     pub stop: Arc<AtomicBool>,
     exited: bool,
@@ -124,6 +128,7 @@ pub struct Searcher {
     killers: Box<[[Move; 2]; MAX_DEPTH]>,
     ss: Vec<SearchEntry>,
     cont_hist: Box<[ContinuationTable; 64 * 6 * 2]>,
+    pv_table: [Line; MAX_PV_SIZE],
 
     enable_uci: bool,
 
@@ -135,6 +140,7 @@ pub struct Searcher {
 
     nodes: usize,
     qnodes: usize,
+    sel_depth: usize,
     tt_attempts: usize,
     tt_hits: usize,
     tt_collisions: usize,
@@ -238,20 +244,27 @@ impl MovePicker {
     }
 }
 
-const TT_SIZE: usize = 1 << 22;
-const TT_MASK: u64 = (TT_SIZE - 1) as u64;
+fn allocate_tt(size_mb: usize) -> Vec<TTEntry> {
+    let n = size_mb * 1024 * 1024 / std::mem::size_of::<TTEntry>();
+    vec![TTEntry::empty();n] 
+}
+
+fn tt_index(hash: u64, size: usize) -> usize {
+    hash.carrying_mul(size as u64, 0).1 as usize
+}
 
 impl Searcher {
-    pub fn new() -> Self {
+    pub fn new(hash_size_mb: usize) -> Self {
         Self {
             stop: Arc::new(AtomicBool::new(false)),
             exited: false,
 
-            tt: vec![TTEntry::empty(); 1 << 22],
+            tt: allocate_tt(hash_size_mb),
             history: Box::new([[[0; 64]; 64]; 2]),
             killers: Box::new([[NULL_MOVE; 2]; MAX_DEPTH]),
             ss: vec![],
             cont_hist: Box::new(std::array::from_fn(|_| ContinuationTable::new())),
+            pv_table: [[NULL_MOVE;_];_],
 
             enable_uci: true,
 
@@ -262,11 +275,16 @@ impl Searcher {
 
             nodes: 0,
             qnodes: 0,
+            sel_depth: 0,
             tt_attempts: 0,
             tt_hits: 0,
             tt_collisions: 0,
             start_time: std::time::Instant::now(),
         }
+    }
+
+    pub fn resize_hash(&mut self, size_mb: usize) {
+        self.tt = allocate_tt(size_mb);
     }
 
     pub fn tt_hit_rate(&self) -> f32 {
@@ -280,7 +298,7 @@ impl Searcher {
     pub fn tt_fill(&self) -> f32 {
         self.tt
             .iter()
-            .map(|x| if x.hash != 0 { 1 } else { 0 })
+            .map(|x| if x.id != 0 { 1 } else { 0 })
             .sum::<i32>() as f32
             / self.tt.len() as f32
     }
@@ -296,19 +314,19 @@ impl Searcher {
     }
 
     fn tt_query<const METRICS: bool>(&mut self, hash: u64) -> Option<TTEntry> {
-        let index = (hash & TT_MASK) as usize;
+        let index = tt_index(hash, self.tt.len());
 
         if METRICS {
             self.tt_attempts += 1;
         }
 
-        if self.tt[index].hash == hash {
+        if self.tt[index].id == (hash as _) {
             if METRICS {
                 self.tt_hits += 1;
             }
             Some(self.tt[index].clone())
         } else {
-            if self.tt[index].hash != 0 && METRICS {
+            if self.tt[index].id != 0 && METRICS {
                 self.tt_collisions += 1;
             }
             None
@@ -323,8 +341,7 @@ impl Searcher {
     }
 
     fn tt_set(&mut self, hash: u64, mv: Move, kind: TTKind, score: i32, ply: usize, depth: i32) {
-        let index = (hash & TT_MASK) as usize;
-
+        let index = tt_index(hash, self.tt.len());
         self.tt[index] = TTEntry::new(hash, mv, kind, score, ply, depth);
     }
 
@@ -334,6 +351,10 @@ impl Searcher {
 
     pub fn qnodes(&self) -> usize {
         self.qnodes
+    }
+
+    pub fn sel_depth(&self) -> usize {
+        self.sel_depth
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -375,8 +396,11 @@ impl Searcher {
         self.node_limit_hard = node_limit_hard;
         self.node_limit_soft = node_limit_soft;
 
+        self.pv_table = [[NULL_MOVE;_];_];
+
         self.nodes = 0;
         self.qnodes = 0;
+        self.sel_depth = 0;
         self.tt_attempts = 0;
         self.tt_hits = 0;
         self.tt_collisions = 0;
@@ -399,7 +423,7 @@ impl Searcher {
 
         let pv_node = beta > alpha + 1;
 
-        if pos.is_threefold_repetition() {
+        if pos.is_repetition(ply) {
             return 0;
         }
 
@@ -486,7 +510,7 @@ impl Searcher {
             return -MATE_SCORE + ply as i32;
         }
 
-        if pos.halfmove_clock == 100 {
+        if pos.halfmove_clock >= 100 {
             return 0;
         }
 
@@ -512,38 +536,55 @@ impl Searcher {
         depth: i32,
         mut alpha: i32,
         beta: i32,
+        exclude: Option<Move>,
     ) -> (i32, Move) {
-        if self.exit_on_node() {
-            return (0, NULL_MOVE);
-        }
-
+        let pv_node = beta > alpha + 1;
         let ply = self.ss.len();
 
-        let alpha0 = alpha;
-
-        let side = pos.to_move;
-        let in_check = pos.checked(side);
-
-        let pv_node = beta > alpha + 1;
-
-        if pos.is_threefold_repetition() {
-            return (0, NULL_MOVE);
+        if pv_node && ply < self.pv_table.len() {
+            self.pv_table[ply][0] = NULL_MOVE;
         }
 
         if depth <= 0 {
             return (self.qsearch(pos, alpha, beta), NULL_MOVE);
         }
 
-        let hash_move = if let Some(entry) = self.tt_query::<true>(pos.hash) {
-            if entry.depth >= depth && !pv_node {
+        if self.exit_on_node() {
+            return (0, NULL_MOVE);
+        }
+
+        self.sel_depth = ply.max(self.sel_depth);
+
+        let alpha0 = alpha;
+
+        let side = pos.to_move;
+        let in_check = pos.checked(side);
+
+        if pos.is_repetition(ply) {
+            return (0, NULL_MOVE);
+        }
+
+        let (hash_move, singular_beta) = if let Some(entry) = self.tt_query::<true>(pos.hash) {
+            if entry.depth as i32 >= depth && !pv_node {
                 if let Some((score, mv)) = entry.cutoff(ply, alpha, beta) {
                     return (score, mv);
                 }
             }
 
-            entry.mv
+            let can_se = depth > 6 &&
+                               exclude.is_none() &&
+                               entry.depth as i32 >= depth - 3 &&
+                               entry.kind != TTKind::Upper &&
+                               !entry.score(ply).is_mate();
+
+            let singular_beta = entry.score(ply) - depth;
+
+            (
+                entry.mv,
+                if can_se { Some(singular_beta) } else { None } 
+            )
         } else {
-            NULL_MOVE
+            (NULL_MOVE, None)
         };
 
         let eval = pos.relative_eval();
@@ -554,7 +595,7 @@ impl Searcher {
 
         // reverse futility pruning
 
-        let can_rfp = !pv_node && !in_check && beta.abs() < MATE_SCORE - 1000;
+        let can_rfp = !pv_node && !in_check && !beta.is_mate();
 
         if can_rfp {
             let rfp_margin = 150 * (depth - improving as i32);
@@ -572,7 +613,7 @@ impl Searcher {
             let r = 2 + depth / 6;
 
             self.push_move(pos, NULL_MOVE);
-            let v = -self.search(pos, depth - 1 - r, -beta, -(beta - 1)).0;
+            let v = -self.search(pos, depth - 1 - r, -beta, -(beta - 1), None).0;
             self.pop_move(pos);
 
             if v >= beta {
@@ -591,7 +632,28 @@ impl Searcher {
         let mut quiets = MoveList::new();
 
         while let Some(mv) = move_picker.next() {
+            if let Some(excl) = exclude {
+                if mv == excl {
+                    move_index += 1;
+                    continue;
+                }
+            }
+
             let quiet = pos.is_capture(mv).is_none() && mv.promotion() == Piece::None;
+
+
+            // singular extensions
+
+            let mut se_ext = 0;
+
+            if mv == hash_move && let Some(singular_beta) = singular_beta {
+                let singular_depth = (depth - 1) / 2;
+                let singular_score = self.search(pos, singular_depth, singular_beta-1, singular_beta, Some(mv)).0;
+
+                if singular_score < singular_beta {
+                    se_ext = 1;
+                }
+            }
 
             self.push_move(pos, mv);
 
@@ -608,8 +670,8 @@ impl Searcher {
                 && !in_check
                 && quiet
                 && fp_margin < alpha
-                && alpha.abs() < MATE_SCORE - 1000
-                && best_score > -MATE_SCORE + 1000
+                && !alpha.is_mate()
+                && !best_score.is_mated()
             {
                 self.pop_move(pos);
                 continue;
@@ -630,15 +692,15 @@ impl Searcher {
             let mut score = -INF_SCORE;
 
             if !pv_node || (move_index > 0) {
-                score = -self.search(pos, depth - 1 - lmr, -(alpha + 1), -alpha).0;
+                score = -self.search(pos, depth - 1 + se_ext - lmr, -(alpha + 1), -alpha, None).0;
 
                 if lmr > 0 && score > alpha {
-                    score = -self.search(pos, depth - 1, -(alpha + 1), -alpha).0;
+                    score = -self.search(pos, depth - 1 + se_ext, -(alpha + 1), -alpha, None).0;
                 }
             }
 
             if pv_node && (move_index == 0 || score > alpha) {
-                score = -self.search(pos, depth - 1, -beta, -alpha).0;
+                score = -self.search(pos, depth - 1 + se_ext, -beta, -alpha, None).0;
             }
 
             if self.exited {
@@ -653,38 +715,56 @@ impl Searcher {
             if score > alpha {
                 alpha = score;
                 best_move = mv;
+
+                if pv_node && ply < self.pv_table.len() {
+                    self.pv_table[ply][0] = mv;
+
+                    if ply < self.pv_table.len() - 1 {
+                        for i in 0..MAX_PV_SIZE-1 {
+                            let pv_mv = self.pv_table[ply+1][i];
+
+                            self.pv_table[ply][i+1] = pv_mv;
+
+                            if pv_mv == NULL_MOVE {
+                                break;
+                            }
+                        }
+                    }
+                }
             }
 
             if alpha >= beta {
                 self.pop_move(pos);
 
-                self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
+                if exclude.is_none() {
+                    self.tt_set(pos.hash, mv, TTKind::Lower, best_score, ply, depth);
 
-                if quiet {
-                    self.add_killer(mv, ply);
+                    if quiet {
+                        self.add_killer(mv, ply);
 
-                    let hist_bonus = 300 * depth - 250;
-                    self.update_history(mv, hist_bonus as i16);
+                        let hist_bonus = 300 * depth - 250;
+                        self.update_history(mv, hist_bonus as i16);
 
-                    for q in quiets.iter() {
-                        self.update_history(*q, -hist_bonus as i16);
-                    }
-
-                    for i in CONT_HISTORY_PLIES {
-                        if ply < 1 {
-                            continue;
+                        for q in quiets.iter() {
+                            self.update_history(*q, -hist_bonus as i16);
                         }
 
-                        let cont = self.ss[ply - i].cont;
-                        if cont.is_none() {
-                            continue;
-                        }
-                        let cont = cont.unwrap();
+                        for i in CONT_HISTORY_PLIES {
+                            if ply < 1 {
+                                continue;
+                            }
 
-                        self.cont_hist[cont].update(pos, mv, hist_bonus as i16);
+                            let cont = self.ss[ply - i].cont;
+                            if cont.is_none() {
+                                continue;
+                            }
+                            let cont = cont.unwrap();
 
-                        for &q in quiets.iter() {
-                            self.cont_hist[cont].update(pos, q, -hist_bonus as i16);
+                            self.cont_hist[cont].update(pos, mv, hist_bonus as i16);
+
+                            for &q in quiets.iter() {
+                                self.cont_hist[cont].update(pos, q, -hist_bonus as i16);
+                            }
                         }
                     }
                 }
@@ -709,23 +789,27 @@ impl Searcher {
             }
         }
 
-        if pos.halfmove_clock == 100 {
+        if pos.halfmove_clock >= 100 {
+            if ply < self.pv_table.len() {
+                self.pv_table[ply][0] = NULL_MOVE;
+            }
             return (0, NULL_MOVE);
         }
 
-        self.tt_set(
-            pos.hash,
-            best_move,
-            if best_score > alpha0 {
-                TTKind::Exact
-            } else {
-                TTKind::Upper
-            },
-            best_score,
-            ply,
-            depth,
-        );
-
+        if exclude.is_none() {
+            self.tt_set(
+                pos.hash,
+                best_move,
+                if best_score > alpha0 {
+                    TTKind::Exact
+                } else {
+                    TTKind::Upper
+                },
+                best_score,
+                ply,
+                depth,
+            );
+        }
         (best_score, best_move)
     }
 
@@ -766,7 +850,7 @@ impl Searcher {
                     )
                 };
 
-                let (score, mv) = self.search(pos, d, alpha, beta);
+                let (score, mv) = self.search(pos, d, alpha, beta, None);
 
                 assert!(self.ss.len() == 0);
 
@@ -785,7 +869,7 @@ impl Searcher {
 
             best_score = score;
 
-            let score_str = if score.abs() > MATE_SCORE - 1000 {
+            let score_str = if score.is_mate() {
                 let plies = MATE_SCORE - score.abs();
                 format!(
                     "mate {}{}",
@@ -801,6 +885,20 @@ impl Searcher {
 
             best_move = mv;
 
+            let mut pv_string = String::new();
+
+            for (i, &pv_mv) in self.pv_table[0].iter().enumerate() {
+                if pv_mv == NULL_MOVE {
+                    break;
+                }
+
+                if i > 0 {
+                    pv_string.push(' ');
+                }
+
+                pv_string.push_str(&pv_mv.uci_string());
+            }
+
             if self.enable_uci {
                 println!(
                     "info depth {} score {} nodes {} nps {} time {} pv {}",
@@ -809,7 +907,7 @@ impl Searcher {
                     self.nodes,
                     nps,
                     time,
-                    best_move.uci_string()
+                    pv_string
                 );
             }
         }
@@ -905,5 +1003,26 @@ impl ContinuationTable {
         let x = &mut self.data[mv.side().id()][piece.id().unwrap()][mv.to()];
 
         *x += clamped - ((*x as i32 * clamped.abs() as i32) / MAX_HISTORY as i32) as i16;
+    }
+}
+
+#[allow(unused)]
+trait TreeScore {
+    fn is_mate(&self) -> bool;
+    fn is_mated(&self) -> bool;
+    fn is_mating(&self) -> bool;
+}
+
+impl TreeScore for i32 {
+    fn is_mate(&self) -> bool {
+        self.abs() > MATE_SCORE - 1000
+    }
+
+    fn is_mated(&self) -> bool {
+        *self < -MATE_SCORE + 1000
+    }
+
+    fn is_mating(&self) -> bool {
+        *self > MATE_SCORE - 1000
     }
 }
