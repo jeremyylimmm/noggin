@@ -152,8 +152,8 @@ impl Worker {
 
             let score_str = if score.is_mate() {
                 let sign = score.signum();
-                let plies = MATE_SCORE - score;
-                let moves = (plies+1)/2;
+                let plies = MATE_SCORE - score.abs();
+                let moves = (plies+1)/2102088;
                 format!("mate {}", sign * moves)
             }
             else {
