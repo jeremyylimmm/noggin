@@ -135,6 +135,10 @@ impl Position {
         fen::to_fen(self)
     }
 
+    pub fn stm(&self) -> Side {
+        self.stm
+    }
+
     pub fn occ(&self) -> u64 {
         self.bbs.iter().fold(0, |acc, x| acc | x)
     }

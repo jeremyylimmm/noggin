@@ -107,12 +107,9 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
 
     let knights = pos.bbs.get(Piece::Knight, pos.stm);
 
-    for knight in iter_bb(knights) {
-        let pin_ray = pos.pin_ray(knight);
-        for to in iter_bb(knight_moves(knight, allies)) {
-            if (pin_ray & legality_mask & to.bb()) != 0 {
-                moves.push(Move::new(knight, to, None));
-            }
+    for knight in iter_bb(knights & !pos.pins) {
+        for to in iter_bb(knight_moves(knight, allies) & legality_mask) {
+            moves.push(Move::new(knight, to, None));
         }
     }
 

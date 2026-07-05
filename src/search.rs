@@ -4,13 +4,41 @@ use crate::*;
 
 const MAX_PLY: usize = 128;
 
+#[derive(Copy, Clone)]
+pub struct Limits {
+    pub hard_nodes: usize,
+    pub soft_nodes: usize,
+
+    pub hard_time: f32,
+    pub soft_time: f32,
+
+    pub depth: i32,
+}
+
+impl Limits {
+    pub fn new() -> Self {
+        Self {
+            hard_nodes: 1_000_000_000_000,
+            soft_nodes: 1_000_000_000_000,
+
+            hard_time: 1_000_000.0,
+            soft_time: 1_000_000.0,
+
+            depth: 255,
+        }
+    }
+}
+
 pub struct Worker {
     pv: [[Move; MAX_PLY]; MAX_PLY],
 
     nodes: usize,
     stopped: bool,
+    start_time: std::time::Instant,
 
     stop: Arc<atomic::AtomicBool>,
+
+    limits: Limits,
 }
 
 impl Worker {
@@ -19,7 +47,9 @@ impl Worker {
             pv: [[Move::NULL; _]; _],
             nodes: 0,
             stopped: false,
+            start_time: std::time::Instant::now(),
             stop: Arc::new(atomic::AtomicBool::new(false)),
+            limits: Limits::new(),
         }
     }
 
@@ -36,7 +66,7 @@ impl Worker {
         self.nodes += 1;
 
         if self.check_stop() {
-            return 0;            
+            return 0;
         }
 
         if ply < self.pv.len() {
@@ -89,18 +119,23 @@ impl Worker {
         best_score
     }
 
-    pub fn go(&mut self, pos: &Position, stop: Arc<atomic::AtomicBool>) -> Score {
+    pub fn elapsed(&self) -> f32 {
+        let now = std::time::Instant::now();
+        (now - self.start_time).as_secs_f32()
+    }
+
+    pub fn go(&mut self, pos: &Position, limits: Limits, stop: Arc<atomic::AtomicBool>) -> Score {
         self.nodes = 0;
         self.stopped = false;
         self.stop = stop;
+        self.limits = limits;
 
-
-        let start = std::time::Instant::now();
+        self.start_time = std::time::Instant::now();
 
         let mut root_score = 0;
         let mut root_pv = [Move::NULL; MAX_PLY];
 
-        for d in 1.. {
+        for d in 1..=self.limits.depth {
             let score = self.search(pos, 0, d);
 
             if self.stopped {
@@ -112,7 +147,7 @@ impl Worker {
             let pv = self.pv();
             root_pv[..pv.len()].copy_from_slice(pv);
 
-            let elapsed = (std::time::Instant::now() - start).as_secs_f32();
+            let elapsed = self.elapsed();
             let nps = self.nodes as f32 / elapsed;
 
             print!(
@@ -129,6 +164,10 @@ impl Worker {
             }
 
             println!("");
+
+            if self.nodes >= self.limits.soft_nodes || elapsed >= self.limits.soft_time {
+                break;
+            }
         }
 
         // so we always have a valid pv
@@ -139,12 +178,19 @@ impl Worker {
 
     fn check_stop(&mut self) -> bool {
         if self.nodes & 4095 == 0 {
-            if self.stop.load(atomic::Ordering::Relaxed) {
+            if self.stop.load(atomic::Ordering::Relaxed)
+                || self.elapsed() >= self.limits.hard_time
+                || self.nodes >= self.limits.hard_nodes
+            {
                 self.stopped = true;
             }
         }
 
         return self.stopped;
+    }
+
+    pub fn nodes(&self) -> usize {
+        self.nodes
     }
 }
 
