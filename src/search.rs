@@ -59,6 +59,10 @@ impl Worker {
     }
 
     pub fn search(&mut self, pos: &Position, ply: usize, depth: i32) -> Score {
+        if ply < self.pv.len() {
+            self.pv[ply][0] = Move::NULL;
+        }
+
         if depth <= 0 {
             return relative_eval(pos);
         }
@@ -67,10 +71,6 @@ impl Worker {
 
         if self.check_stop() {
             return 0;
-        }
-
-        if ply < self.pv.len() {
-            self.pv[ply][0] = Move::NULL;
         }
 
         let moves = pos.gen_legal_moves();

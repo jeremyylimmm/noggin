@@ -1054,13 +1054,149 @@ const FENS: [(&str, &[(i32, usize)]); 128] = [
     ),
 ];
 
-#[test]
-fn test_perft() {
-    for (fen, entries) in FENS {
-        let pos = Position::from_fen(fen).unwrap();
+fn test_perft_from_position(index: usize) {
+    let (fen, entries) = FENS[index];
+    let pos = Position::from_fen(fen).unwrap();
 
-        for &(depth, count) in entries {
-            assert_eq!(pos.perft(depth), count);
-        }
+    for &(depth, count) in entries {
+        assert_eq!(pos.perft(depth), count);
     }
 }
+
+macro_rules! define_perft_test {
+    ($name:ident, $index: expr) => {
+        #[test]
+        fn $name() {
+            test_perft_from_position($index);
+        }
+    };
+}
+
+define_perft_test!(test_perft_0, 0);
+define_perft_test!(test_perft_1, 1);
+define_perft_test!(test_perft_2, 2);
+define_perft_test!(test_perft_3, 3);
+define_perft_test!(test_perft_4, 4);
+define_perft_test!(test_perft_5, 5);
+define_perft_test!(test_perft_6, 6);
+define_perft_test!(test_perft_7, 7);
+define_perft_test!(test_perft_8, 8);
+define_perft_test!(test_perft_9, 9);
+define_perft_test!(test_perft_10, 10);
+define_perft_test!(test_perft_11, 11);
+define_perft_test!(test_perft_12, 12);
+define_perft_test!(test_perft_13, 13);
+define_perft_test!(test_perft_14, 14);
+define_perft_test!(test_perft_15, 15);
+define_perft_test!(test_perft_16, 16);
+define_perft_test!(test_perft_17, 17);
+define_perft_test!(test_perft_18, 18);
+define_perft_test!(test_perft_19, 19);
+define_perft_test!(test_perft_20, 20);
+define_perft_test!(test_perft_21, 21);
+define_perft_test!(test_perft_22, 22);
+define_perft_test!(test_perft_23, 23);
+define_perft_test!(test_perft_24, 24);
+define_perft_test!(test_perft_25, 25);
+define_perft_test!(test_perft_26, 26);
+define_perft_test!(test_perft_27, 27);
+define_perft_test!(test_perft_28, 28);
+define_perft_test!(test_perft_29, 29);
+define_perft_test!(test_perft_30, 30);
+define_perft_test!(test_perft_31, 31);
+define_perft_test!(test_perft_32, 32);
+define_perft_test!(test_perft_33, 33);
+define_perft_test!(test_perft_34, 34);
+define_perft_test!(test_perft_35, 35);
+define_perft_test!(test_perft_36, 36);
+define_perft_test!(test_perft_37, 37);
+define_perft_test!(test_perft_38, 38);
+define_perft_test!(test_perft_39, 39);
+define_perft_test!(test_perft_40, 40);
+define_perft_test!(test_perft_41, 41);
+define_perft_test!(test_perft_42, 42);
+define_perft_test!(test_perft_43, 43);
+define_perft_test!(test_perft_44, 44);
+define_perft_test!(test_perft_45, 45);
+define_perft_test!(test_perft_46, 46);
+define_perft_test!(test_perft_47, 47);
+define_perft_test!(test_perft_48, 48);
+define_perft_test!(test_perft_49, 49);
+define_perft_test!(test_perft_50, 50);
+define_perft_test!(test_perft_51, 51);
+define_perft_test!(test_perft_52, 52);
+define_perft_test!(test_perft_53, 53);
+define_perft_test!(test_perft_54, 54);
+define_perft_test!(test_perft_55, 55);
+define_perft_test!(test_perft_56, 56);
+define_perft_test!(test_perft_57, 57);
+define_perft_test!(test_perft_58, 58);
+define_perft_test!(test_perft_59, 59);
+define_perft_test!(test_perft_60, 60);
+define_perft_test!(test_perft_61, 61);
+define_perft_test!(test_perft_62, 62);
+define_perft_test!(test_perft_63, 63);
+define_perft_test!(test_perft_64, 64);
+define_perft_test!(test_perft_65, 65);
+define_perft_test!(test_perft_66, 66);
+define_perft_test!(test_perft_67, 67);
+define_perft_test!(test_perft_68, 68);
+define_perft_test!(test_perft_69, 69);
+define_perft_test!(test_perft_70, 70);
+define_perft_test!(test_perft_71, 71);
+define_perft_test!(test_perft_72, 72);
+define_perft_test!(test_perft_73, 73);
+define_perft_test!(test_perft_74, 74);
+define_perft_test!(test_perft_75, 75);
+define_perft_test!(test_perft_76, 76);
+define_perft_test!(test_perft_77, 77);
+define_perft_test!(test_perft_78, 78);
+define_perft_test!(test_perft_79, 79);
+define_perft_test!(test_perft_80, 80);
+define_perft_test!(test_perft_81, 81);
+define_perft_test!(test_perft_82, 82);
+define_perft_test!(test_perft_83, 83);
+define_perft_test!(test_perft_84, 84);
+define_perft_test!(test_perft_85, 85);
+define_perft_test!(test_perft_86, 86);
+define_perft_test!(test_perft_87, 87);
+define_perft_test!(test_perft_88, 88);
+define_perft_test!(test_perft_89, 89);
+define_perft_test!(test_perft_90, 90);
+define_perft_test!(test_perft_91, 91);
+define_perft_test!(test_perft_92, 92);
+define_perft_test!(test_perft_93, 93);
+define_perft_test!(test_perft_94, 94);
+define_perft_test!(test_perft_95, 95);
+define_perft_test!(test_perft_96, 96);
+define_perft_test!(test_perft_97, 97);
+define_perft_test!(test_perft_98, 98);
+define_perft_test!(test_perft_99, 99);
+define_perft_test!(test_perft_100, 100);
+define_perft_test!(test_perft_101, 101);
+define_perft_test!(test_perft_102, 102);
+define_perft_test!(test_perft_103, 103);
+define_perft_test!(test_perft_104, 104);
+define_perft_test!(test_perft_105, 105);
+define_perft_test!(test_perft_106, 106);
+define_perft_test!(test_perft_107, 107);
+define_perft_test!(test_perft_108, 108);
+define_perft_test!(test_perft_109, 109);
+define_perft_test!(test_perft_110, 110);
+define_perft_test!(test_perft_111, 111);
+define_perft_test!(test_perft_112, 112);
+define_perft_test!(test_perft_113, 113);
+define_perft_test!(test_perft_114, 114);
+define_perft_test!(test_perft_115, 115);
+define_perft_test!(test_perft_116, 116);
+define_perft_test!(test_perft_117, 117);
+define_perft_test!(test_perft_118, 118);
+define_perft_test!(test_perft_119, 119);
+define_perft_test!(test_perft_120, 120);
+define_perft_test!(test_perft_121, 121);
+define_perft_test!(test_perft_122, 122);
+define_perft_test!(test_perft_123, 123);
+define_perft_test!(test_perft_124, 124);
+define_perft_test!(test_perft_125, 125);
+define_perft_test!(test_perft_126, 126);
+define_perft_test!(test_perft_127, 127);
