@@ -58,7 +58,7 @@ impl Worker {
         &self.pv[0][..len]
     }
 
-    pub fn search(&mut self, pos: &Position, ply: usize, depth: i32) -> Score {
+    pub fn search(&mut self, pos: &Position, mut alpha: Score, beta: Score, ply: usize, depth: i32) -> Score {
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
         }
@@ -83,18 +83,22 @@ impl Worker {
             }
         }
 
-        let mut best_score = -MATE_SCORE;
+        let mut best_score = -INF_SCORE;
 
         for mv in moves {
             let child = pos.make_move(mv);
 
-            let score = -self.search(&child, ply + 1, depth - 1);
+            let score = -self.search(&child, -beta, -alpha, ply + 1, depth - 1);
 
             if self.stopped {
                 return 0;
             }
 
             if score > best_score {
+                best_score = score;
+            }
+
+            if score > alpha {
                 if ply < self.pv.len() {
                     self.pv[ply][0] = mv;
 
@@ -112,7 +116,11 @@ impl Worker {
                     }
                 }
 
-                best_score = score;
+                alpha = score;
+            }
+
+            if alpha >= beta {
+                return best_score;
             }
         }
 
@@ -136,7 +144,7 @@ impl Worker {
         let mut root_pv = [Move::NULL; MAX_PLY];
 
         for d in 1..=self.limits.depth {
-            let score = self.search(pos, 0, d);
+            let score = self.search(pos, -INF_SCORE, INF_SCORE, 0, d);
 
             if self.stopped {
                 break;
