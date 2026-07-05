@@ -170,8 +170,8 @@ struct GoParams {
 }
 
 fn parse_ms(x: &str) -> Option<f32> {
-    let ms = x.parse::<i32>().ok()?;
-    Some(ms as f32 / 1000.0)
+    let ms = x.parse::<usize>().ok()?;
+    Some((ms as f64 / 1000.0) as f32)
 }
 
 fn parse_go(args: &[&str]) -> Result<GoParams, String> {
