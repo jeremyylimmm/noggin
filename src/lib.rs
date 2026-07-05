@@ -12,6 +12,7 @@ pub mod generated;
 
 pub type Score = i32;
 pub const MATE_SCORE: Score = 30_000;
+pub const INF_SCORE: Score = 1_000_000;
 
 #[allow(unused)]
 pub const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
