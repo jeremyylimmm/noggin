@@ -150,10 +150,20 @@ impl Worker {
             let elapsed = self.elapsed();
             let nps = self.nodes as f32 / elapsed;
 
+            let score_str = if score.is_mate() {
+                let sign = score.signum();
+                let plies = MATE_SCORE - score;
+                let moves = (plies+1)/2;
+                format!("mate {}", sign * moves)
+            }
+            else {
+                format!("cp {}", score)
+            };
+
             print!(
                 "info depth {} score {} nodes {} nps {} time {} pv",
                 d,
-                score,
+                score_str,
                 self.nodes,
                 nps as i32,
                 (elapsed * 1000.0) as i32
@@ -196,4 +206,14 @@ impl Worker {
 
 fn relative_eval(pos: &Position) -> Score {
     eval::evaluate(pos) * pos.stm.sign()
+}
+
+trait ScoreType {
+    fn is_mate(&self) -> bool;
+}
+
+impl ScoreType for Score {
+    fn is_mate(&self) -> bool {
+        self.abs() > (MATE_SCORE - 1000)
+    }
 }
