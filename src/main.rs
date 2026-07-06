@@ -26,7 +26,7 @@ fn main() {
 
 fn uci_main() {
     let mut state = State::Idle(search::Worker::new());
-    let mut pos = Position::from_fen(STARTPOS_FEN).unwrap();
+    let mut pos_stack = vec![Position::from_fen(STARTPOS_FEN).unwrap()];
 
     loop {
         let mut input = String::new();
@@ -55,12 +55,13 @@ fn uci_main() {
         } else if args[0] == "ucinewgame" {
             state.flush();
             let worker = search::Worker::new();
-            pos = Position::from_fen(STARTPOS_FEN).unwrap();
+            pos_stack.clear();
+            pos_stack.push(Position::from_fen(STARTPOS_FEN).unwrap());
             state = State::Idle(worker);
         } else if args[0] == "position" {
             let w = state.flush();
             match parse_position_cmd(&args) {
-                Ok(p) => pos = p,
+                Ok(stack) => pos_stack = stack,
                 Err(msg) => println!("{}", msg),
             }
             state = State::Idle(w);
@@ -71,13 +72,12 @@ fn uci_main() {
                 Ok(params) => {
                     let stop = Arc::new(atomic::AtomicBool::new(false));
 
-                    let pos = pos.clone();
-
                     let stop_copy = stop.clone();
-                    let limits = params.limits(pos.stm());
+                    let limits = params.limits(pos_stack.last().unwrap().stm());
+                    let stack_copy = pos_stack.clone();
 
                     let join_handle = std::thread::spawn(move || {
-                        worker.go(&pos, limits, stop_copy);
+                        worker.go(stack_copy, limits, stop_copy);
                         println!("bestmove {}", worker.pv()[0]);
                         return worker;
                     });
@@ -102,14 +102,16 @@ fn uci_main() {
     }
 }
 
-fn parse_position_cmd(args: &[&str]) -> Result<Position, String> {
+fn parse_position_cmd(args: &[&str]) -> Result<Vec<Position>, String> {
     assert!(args[0] == "position");
+
+    let mut stack = vec![];
 
     let &base = args
         .get(1)
         .ok_or("specify 'startpos' or 'fen'".to_string())?;
 
-    let (mut pos, next) = if base == "startpos" {
+    let (initial, next) = if base == "startpos" {
         (Position::from_fen(STARTPOS_FEN).unwrap(), 2)
     } else if base == "fen" {
         if args.len() < 8 {
@@ -123,8 +125,10 @@ fn parse_position_cmd(args: &[&str]) -> Result<Position, String> {
         return Err(format!("expected 'startpos' or 'fen', got '{}'", base));
     };
 
+    stack.push(initial);
+
     if next >= args.len() {
-        return Ok(pos);
+        return Ok(stack);
     }
 
     if args[next] != "moves" {
@@ -134,14 +138,16 @@ fn parse_position_cmd(args: &[&str]) -> Result<Position, String> {
     for uci_mv in &args[(next + 1)..] {
         let mv = Move::from_uci(uci_mv).ok_or(format!("malformed move {}", uci_mv))?;
 
-        if !pos.is_legal(mv) {
+        let cur = stack.last().unwrap();
+
+        if !cur.is_legal(mv) {
             return Err(format!("move {} is illegal", uci_mv));
         }
 
-        pos = pos.make_move(mv);
+        stack.push(cur.make_move(mv));
     }
 
-    Ok(pos)
+    Ok(stack)
 }
 
 impl State {
@@ -291,7 +297,7 @@ fn bench_main() {
 
     limits.depth = 6;
 
-    worker.go(&pos, limits, Arc::new(atomic::AtomicBool::new(false)));
+    worker.go(vec![pos], limits, Arc::new(atomic::AtomicBool::new(false)));
 
     let nodes = worker.nodes();
     let elapsed = worker.elapsed();

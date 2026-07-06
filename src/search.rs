@@ -39,6 +39,8 @@ pub struct Worker {
     stop: Arc<atomic::AtomicBool>,
 
     limits: Limits,
+
+    pos_stack: Vec<Position>,
 }
 
 impl Worker {
@@ -50,6 +52,7 @@ impl Worker {
             start_time: std::time::Instant::now(),
             stop: Arc::new(atomic::AtomicBool::new(false)),
             limits: Limits::new(),
+            pos_stack: vec![],
         }
     }
 
@@ -58,14 +61,20 @@ impl Worker {
         &self.pv[0][..len]
     }
 
-    fn qsearch(&mut self, pos: &Position, mut alpha: Score, beta: Score, ply: usize) -> Score {
+    fn qsearch(&mut self, mut alpha: Score, beta: Score, ply: usize) -> Score {
         self.nodes += 1;
 
         if self.check_stop() {
             return 0;
         }
 
-        let moves = move_gen::gen_legal_qsearch(pos);
+        if self.is_repetition(ply as _) {
+            return 0;
+        }
+
+        let pos = self.pos_stack.last().unwrap().clone();
+
+        let moves = move_gen::gen_legal_qsearch(&pos);
 
         if moves.len() == 0 {
             if pos.checked().is_some() {
@@ -73,12 +82,12 @@ impl Worker {
             }
         }
 
-        let mut picker = MovePicker::new(pos, moves);
+        let mut picker = MovePicker::new(&pos, moves);
 
         let mut best_score = if pos.checked().is_some() {
             -INF_SCORE
         } else {
-            let stand_pat = relative_eval(pos);
+            let stand_pat = relative_eval(&pos);
 
             if stand_pat >= beta {
                 return stand_pat;
@@ -90,7 +99,9 @@ impl Worker {
         while let Some(mv) = picker.next() {
             let child = pos.make_move(mv);
 
-            let score = -self.qsearch(&child, -beta, -alpha, ply + 1);
+            self.pos_stack.push(child);
+            let score = -self.qsearch(-beta, -alpha, ply + 1);
+            self.pos_stack.pop();
 
             if score > best_score {
                 best_score = score;
@@ -108,20 +119,13 @@ impl Worker {
         best_score
     }
 
-    fn search(
-        &mut self,
-        pos: &Position,
-        mut alpha: Score,
-        beta: Score,
-        ply: usize,
-        depth: i32,
-    ) -> Score {
+    fn search(&mut self, mut alpha: Score, beta: Score, ply: usize, depth: i32) -> Score {
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
         }
 
         if depth <= 0 {
-            return self.qsearch(pos, alpha, beta, ply);
+            return self.qsearch(alpha, beta, ply);
         }
 
         self.nodes += 1;
@@ -129,6 +133,12 @@ impl Worker {
         if self.check_stop() {
             return 0;
         }
+
+        if self.is_repetition(ply as _) {
+            return 0;
+        }
+
+        let pos = self.pos_stack.last().unwrap().clone();
 
         let moves = pos.gen_legal_moves();
 
@@ -140,14 +150,16 @@ impl Worker {
             }
         }
 
-        let mut picker = MovePicker::new(pos, moves);
+        let mut picker = MovePicker::new(&pos, moves);
 
         let mut best_score = -INF_SCORE;
 
         while let Some(mv) = picker.next() {
             let child = pos.make_move(mv);
 
-            let score = -self.search(&child, -beta, -alpha, ply + 1, depth - 1);
+            self.pos_stack.push(child);
+            let score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+            self.pos_stack.pop();
 
             if self.stopped {
                 return 0;
@@ -191,11 +203,18 @@ impl Worker {
         (now - self.start_time).as_secs_f32()
     }
 
-    pub fn go(&mut self, pos: &Position, limits: Limits, stop: Arc<atomic::AtomicBool>) -> Score {
+    pub fn go(
+        &mut self,
+        pos_stack: Vec<Position>,
+        limits: Limits,
+        stop: Arc<atomic::AtomicBool>,
+    ) -> Score {
         self.nodes = 0;
         self.stopped = false;
         self.stop = stop;
         self.limits = limits;
+
+        self.pos_stack = pos_stack;
 
         self.start_time = std::time::Instant::now();
 
@@ -203,7 +222,7 @@ impl Worker {
         let mut root_pv = [Move::NULL; MAX_PLY];
 
         for d in 1..=self.limits.depth {
-            let score = self.search(pos, -INF_SCORE, INF_SCORE, 0, d);
+            let score = self.search(-INF_SCORE, INF_SCORE, 0, d);
 
             if self.stopped {
                 break;
@@ -250,6 +269,36 @@ impl Worker {
         self.pv[0] = root_pv;
 
         root_score
+    }
+
+    fn is_repetition(&self, ply: i32) -> bool {
+        let pos = self.pos_stack.last().unwrap();
+
+        let hash = pos.hash;
+        let hm = pos.halfmove_clock as usize;
+
+        let mut count = 1;
+        let mut offset = 2;
+
+        let max_offset = hm.min(self.pos_stack.len()-1);
+
+        while offset <= max_offset {
+            let index = self.pos_stack.len() - 1 - offset;
+
+            if self.pos_stack[index].hash == hash {
+                count += 1;
+
+                let threshold = if (ply - offset as i32) <= 0 { 3 } else { 2 };
+
+                if count >= threshold {
+                    return true;
+                }
+            }
+
+            offset += 2;
+        }
+
+        false
     }
 
     fn check_stop(&mut self) -> bool {

@@ -159,9 +159,11 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         threats: 0,
         pins: 0,
         checkers: 0,
+        hash: 0,
     };
 
     pos.update_threats_checkers_ep_and_pins();
+    pos.hash = pos.compute_hash();
 
     Ok(pos)
 }

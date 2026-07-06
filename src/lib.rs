@@ -10,6 +10,8 @@ mod test_position;
 
 pub mod generated;
 
+use generated::zobrist;
+
 pub type Score = i32;
 pub const MATE_SCORE: Score = 30_000;
 pub const INF_SCORE: Score = 1_000_000;
@@ -125,6 +127,7 @@ pub struct Position {
     threats: u64,
     pins: u64,
     checkers: u64,
+    hash: u64,
 }
 
 impl Position {
@@ -200,6 +203,7 @@ impl Position {
                 }
             }
 
+            self.hash ^= zobrist::EP_SQ[ep_sq.id()];
             self.ep = None; // no legal en passants - remove the flag
         }
     }
@@ -333,19 +337,28 @@ impl Position {
         *result.bbs.get_mut(piece_start, self.stm) ^= mv.from().bb();
         result.board[mv.from()] = None;
 
+        result.hash ^= zobrist::PIECE_SQ[self.stm.id()][piece_start.id()][mv.from().id()];
+
         if let Some((cap_sq, cap_piece)) = capture {
             assert!(cap_piece != Piece::King);
             *result.bbs.get_mut(cap_piece, self.stm.opp()) ^= cap_sq.bb();
             result.board[cap_sq] = None;
+
+            result.hash ^= zobrist::PIECE_SQ[self.stm.opp().id()][cap_piece.id()][cap_sq.id()];
         }
 
         *result.bbs.get_mut(piece_end, self.stm) ^= mv.to().bb();
         result.board[mv.to()] = Some(piece_end);
 
+        result.hash ^= zobrist::PIECE_SQ[self.stm.id()][piece_end.id()][mv.to().id()];
+
         if let Some((rook_from, rook_to)) = self.castle(mv) {
             *result.bbs.get_mut(Piece::Rook, self.stm) ^= rook_from.bb() | rook_to.bb();
             result.board[rook_from] = None;
             result.board[rook_to] = Some(Piece::Rook);
+
+            result.hash ^= zobrist::PIECE_SQ[self.stm.id()][Piece::Rook.id()][rook_from.id()]
+                ^ zobrist::PIECE_SQ[self.stm.id()][Piece::Rook.id()][rook_to.id()];
         }
 
         if piece_start == Piece::King {
@@ -389,8 +402,17 @@ impl Position {
             _ => {}
         }
 
+        result.hash ^= zobrist::CASTLING[self.castle_rights as usize];
+        result.hash ^= zobrist::CASTLING[result.castle_rights as usize];
+
+        if let Some(existing_ep) = self.ep {
+            result.hash ^= zobrist::EP_SQ[existing_ep.id()];
+        }
+
         result.ep = if piece_start == Piece::Pawn && mv.from().rank().abs_diff(mv.to().rank()) > 1 {
-            Some(Sq(mv.to().0 ^ 0b001000))
+            let sq = Sq(mv.to().0 ^ 0b001000);
+            result.hash ^= zobrist::EP_SQ[sq.id()];
+            Some(sq)
         } else {
             None
         };
@@ -406,6 +428,7 @@ impl Position {
         }
 
         result.stm = result.stm.opp();
+        result.hash ^= zobrist::BLACK_TO_MOVE;
 
         result.update_threats_checkers_ep_and_pins();
 
@@ -563,6 +586,37 @@ impl Position {
 
         result
     }
+
+    pub fn compute_hash(&self) -> u64 {
+        let mut hash = zobrist::BASE;
+
+        for s in [Side::White, Side::Black] {
+            for p in [
+                Piece::Pawn,
+                Piece::Knight,
+                Piece::Bishop,
+                Piece::Rook,
+                Piece::Queen,
+                Piece::King,
+            ] {
+                for sq in iter_bb(self.bbs.get(p, s)) {
+                    hash ^= zobrist::PIECE_SQ[s.id()][p.id()][sq.id()];
+                }
+            }
+        }
+
+        if self.stm == Side::Black {
+            hash ^= zobrist::BLACK_TO_MOVE;
+        }
+
+        hash ^= zobrist::CASTLING[self.castle_rights as usize];
+
+        if let Some(ep) = self.ep {
+            hash ^= zobrist::EP_SQ[ep.id()];
+        }
+
+        hash
+    }
 }
 
 impl Sq {
@@ -587,6 +641,10 @@ impl Sq {
         }
 
         Some(Self::from_coords(rank as _, file as _))
+    }
+
+    pub fn id(&self) -> usize {
+        self.0 as _
     }
 
     pub fn rank(&self) -> usize {
