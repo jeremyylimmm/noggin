@@ -58,7 +58,57 @@ impl Worker {
         &self.pv[0][..len]
     }
 
-    pub fn search(
+    fn qsearch(&mut self, pos: &Position, mut alpha: Score, beta: Score, ply: usize) -> Score {
+        self.nodes += 1;
+
+        if self.check_stop() {
+            return 0;
+        }
+
+        let moves = move_gen::gen_legal_qsearch(pos);
+
+        if moves.len() == 0 {
+            if pos.checked().is_some() {
+                return -MATE_SCORE + ply as Score;
+            }
+        }
+
+        let mut picker = MovePicker::new(pos, moves);
+
+        let mut best_score = if pos.checked().is_some() {
+            -INF_SCORE
+        } else {
+            let stand_pat = relative_eval(pos);
+
+            if stand_pat >= beta {
+                return stand_pat;
+            }
+
+            stand_pat
+        };
+
+        while let Some(mv) = picker.next() {
+            let child = pos.make_move(mv);
+
+            let score = -self.qsearch(&child, -beta, -alpha, ply + 1);
+
+            if score > best_score {
+                best_score = score;
+            }
+
+            if score > alpha {
+                alpha = score;
+            }
+
+            if alpha >= beta {
+                return best_score;
+            }
+        }
+
+        best_score
+    }
+
+    fn search(
         &mut self,
         pos: &Position,
         mut alpha: Score,
@@ -71,7 +121,7 @@ impl Worker {
         }
 
         if depth <= 0 {
-            return relative_eval(pos);
+            return self.qsearch(pos, alpha, beta, ply);
         }
 
         self.nodes += 1;

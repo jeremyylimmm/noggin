@@ -169,9 +169,112 @@ fn gen_standard(pos: &Position, checker: Option<Sq>) -> MoveList {
     moves
 }
 
+fn gen_captures(pos: &Position) -> MoveList {
+    let mut moves = MoveList::new();
+
+    let occ = pos.occ();
+    let allies = pos.side_occ(pos.stm);
+    let opp = pos.side_occ(pos.stm.opp());
+
+    let pawns = pos.bbs.get(Piece::Pawn, pos.stm);
+
+    if let Some(ep_sq) = pos.ep {
+        let ep_mask = ep_sq.bb();
+
+        let left_ep = attacks::pawn_captures_left(pawns, ep_mask, pos.stm);
+        let right_ep = attacks::pawn_captures_right(pawns, ep_mask, pos.stm);
+
+        for (bb, offset) in [left_ep, right_ep] {
+            for to in iter_bb(bb) {
+                let cap_sq = Sq((to.0 ^ 0b001000) as _);
+                let from = Sq((to.0 as i32 - offset) as _);
+
+                if pos.ep_legal(cap_sq, from, to) {
+                    moves.push(Move::new(from, to, None));
+                }
+            }
+        }
+    }
+
+    let left_captures = attacks::pawn_captures_left(pawns, opp, pos.stm);
+    let right_captures = attacks::pawn_captures_right(pawns, opp, pos.stm);
+
+    for (bb, offset) in [left_captures, right_captures] {
+        for to in iter_bb(bb) {
+            let from = Sq((to.0 as i32 - offset) as _);
+
+            if (pos.pin_ray(from) & to.bb()) == 0 {
+                continue;
+            }
+
+            if to.rank() == pos.stm.promotion_rank() {
+                moves.push(Move::new(from, to, Some(Piece::Knight)));
+                moves.push(Move::new(from, to, Some(Piece::Bishop)));
+                moves.push(Move::new(from, to, Some(Piece::Rook)));
+                moves.push(Move::new(from, to, Some(Piece::Queen)));
+            } else {
+                moves.push(Move::new(from, to, None));
+            }
+        }
+    }
+
+    let knights = pos.bbs.get(Piece::Knight, pos.stm);
+
+    for knight in iter_bb(knights & !pos.pins) {
+        for to in iter_bb(knight_moves(knight, allies) & opp) {
+            moves.push(Move::new(knight, to, None));
+        }
+    }
+
+    let bishops = pos.bbs.get(Piece::Bishop, pos.stm);
+
+    for bishop in iter_bb(bishops) {
+        let mask = pos.pin_ray(bishop) & opp;
+        for to in iter_bb(bishop_moves(bishop, occ, allies) & mask) {
+            moves.push(Move::new(bishop, to, None));
+        }
+    }
+
+    let rooks = pos.bbs.get(Piece::Rook, pos.stm);
+
+    for rook in iter_bb(rooks) {
+        let mask = pos.pin_ray(rook) & opp;
+        for to in iter_bb(rook_moves(rook, occ, allies) & mask) {
+            moves.push(Move::new(rook, to, None));
+        }
+    }
+
+    let queens = pos.bbs.get(Piece::Queen, pos.stm);
+
+    for queen in iter_bb(queens) {
+        let mask = pos.pin_ray(queen) & opp;
+        for to in iter_bb(queen_moves(queen, occ, allies) & mask) {
+            moves.push(Move::new(queen, to, None));
+        }
+    }
+
+    let kings = pos.bbs.get(Piece::King, pos.stm);
+
+    for king in iter_bb(kings) {
+        for to in iter_bb(king_moves(king, allies) & opp & !pos.threats) {
+            moves.push(Move::new(king, to, None));
+        }
+    }
+
+    moves
+}
+
 pub fn gen_legal(pos: &Position) -> MoveList {
     match pos.checked() {
         Check::None => gen_standard(pos, None),
+        Check::Single(sq) => gen_standard(pos, Some(sq)),
+        Check::Double => gen_evasions(pos),
+    }
+}
+
+pub fn gen_legal_qsearch(pos: &Position) -> MoveList {
+    match pos.checked() {
+        Check::None => gen_captures(pos),
         Check::Single(sq) => gen_standard(pos, Some(sq)),
         Check::Double => gen_evasions(pos),
     }
