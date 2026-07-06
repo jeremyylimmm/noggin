@@ -58,7 +58,14 @@ impl Worker {
         &self.pv[0][..len]
     }
 
-    pub fn search(&mut self, pos: &Position, mut alpha: Score, beta: Score, ply: usize, depth: i32) -> Score {
+    pub fn search(
+        &mut self,
+        pos: &Position,
+        mut alpha: Score,
+        beta: Score,
+        ply: usize,
+        depth: i32,
+    ) -> Score {
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
         }
@@ -83,9 +90,11 @@ impl Worker {
             }
         }
 
+        let mut picker = MovePicker::new(pos, moves);
+
         let mut best_score = -INF_SCORE;
 
-        for mv in moves {
+        while let Some(mv) = picker.next() {
             let child = pos.make_move(mv);
 
             let score = -self.search(&child, -beta, -alpha, ply + 1, depth - 1);
@@ -161,10 +170,9 @@ impl Worker {
             let score_str = if score.is_mate() {
                 let sign = score.signum();
                 let plies = MATE_SCORE - score.abs();
-                let moves = (plies+1)/2;
+                let moves = (plies + 1) / 2;
                 format!("mate {}", sign * moves)
-            }
-            else {
+            } else {
                 format!("cp {}", score)
             };
 
@@ -223,5 +231,61 @@ trait ScoreType {
 impl ScoreType for Score {
     fn is_mate(&self) -> bool {
         self.abs() > (MATE_SCORE - 1000)
+    }
+}
+
+struct MovePicker {
+    moves: MoveList,
+    scores: [i32; 256],
+    index: usize,
+}
+
+impl MovePicker {
+    fn new(pos: &Position, moves: MoveList) -> Self {
+        let mut scores = [0; _];
+
+        for i in 0..moves.len() {
+            scores[i] = Self::score_move(pos, moves[i]);
+        }
+
+        Self {
+            moves,
+            scores,
+            index: 0,
+        }
+    }
+
+    fn score_move(pos: &Position, mv: Move) -> i32 {
+        if let Some((_, p)) = pos.capture(mv) {
+            p.material_value() - p.id() as i32
+        } else {
+            0
+        }
+    }
+
+    fn next(&mut self) -> Option<Move> {
+        if self.index >= self.moves.len() {
+            None
+        } else {
+            let mut best_idx = 0xffffffff;
+            let mut best_score = i32::MIN;
+
+            for i in self.index..self.moves.len() {
+                let s = self.scores[i];
+
+                if s > best_score {
+                    best_idx = i;
+                    best_score = s;
+                }
+            }
+
+            self.moves.swap(self.index, best_idx);
+            self.scores.swap(self.index, best_idx);
+
+            let mv = self.moves[self.index];
+            self.index += 1;
+
+            Some(mv)
+        }
     }
 }

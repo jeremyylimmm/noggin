@@ -646,6 +646,10 @@ impl Piece {
         *self as usize
     }
 
+    pub fn material_value(&self) -> Score {
+        eval::MATERIAL_VALUE[self.id()]
+    }
+
     fn from_id(id: usize) -> Option<Self> {
         match id {
             0 => Some(Piece::Pawn),
@@ -871,6 +875,10 @@ impl MoveList {
         assert!(self.len() < self.moves.len());
         self.moves[self.len] = mv;
         self.len += 1;
+    }
+
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.moves.swap(a, b);
     }
 }
 
