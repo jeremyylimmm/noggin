@@ -1200,3 +1200,160 @@ define_perft_test!(test_perft_124, 124);
 define_perft_test!(test_perft_125, 125);
 define_perft_test!(test_perft_126, 126);
 define_perft_test!(test_perft_127, 127);
+
+fn test_zobrist(pos: &Position, depth: i32) {
+    assert_eq!(pos.hash, pos.compute_hash());
+
+    if depth > 0 {
+        let moves = pos.gen_legal_moves();
+
+        for mv in moves {
+            let child = pos.make_move(mv);
+            test_zobrist(&child, depth - 1);
+        }
+    }
+}
+
+fn test_zobrist_from_position(index: usize) {
+    let (fen, _) = FENS[index];
+    let pos = Position::from_fen(fen).unwrap();
+    test_zobrist(&pos, 5);
+}
+
+macro_rules! define_zobrist_test {
+    ($name:ident, $index: expr) => {
+        #[test]
+        fn $name() {
+            test_zobrist_from_position($index);
+        }
+    };
+}
+
+define_zobrist_test!(test_zobrist_0, 0);
+define_zobrist_test!(test_zobrist_1, 1);
+define_zobrist_test!(test_zobrist_2, 2);
+define_zobrist_test!(test_zobrist_3, 3);
+define_zobrist_test!(test_zobrist_4, 4);
+define_zobrist_test!(test_zobrist_5, 5);
+define_zobrist_test!(test_zobrist_6, 6);
+define_zobrist_test!(test_zobrist_7, 7);
+define_zobrist_test!(test_zobrist_8, 8);
+define_zobrist_test!(test_zobrist_9, 9);
+define_zobrist_test!(test_zobrist_10, 10);
+define_zobrist_test!(test_zobrist_11, 11);
+define_zobrist_test!(test_zobrist_12, 12);
+define_zobrist_test!(test_zobrist_13, 13);
+define_zobrist_test!(test_zobrist_14, 14);
+define_zobrist_test!(test_zobrist_15, 15);
+define_zobrist_test!(test_zobrist_16, 16);
+define_zobrist_test!(test_zobrist_17, 17);
+define_zobrist_test!(test_zobrist_18, 18);
+define_zobrist_test!(test_zobrist_19, 19);
+define_zobrist_test!(test_zobrist_20, 20);
+define_zobrist_test!(test_zobrist_21, 21);
+define_zobrist_test!(test_zobrist_22, 22);
+define_zobrist_test!(test_zobrist_23, 23);
+define_zobrist_test!(test_zobrist_24, 24);
+define_zobrist_test!(test_zobrist_25, 25);
+define_zobrist_test!(test_zobrist_26, 26);
+define_zobrist_test!(test_zobrist_27, 27);
+define_zobrist_test!(test_zobrist_28, 28);
+define_zobrist_test!(test_zobrist_29, 29);
+define_zobrist_test!(test_zobrist_30, 30);
+define_zobrist_test!(test_zobrist_31, 31);
+define_zobrist_test!(test_zobrist_32, 32);
+define_zobrist_test!(test_zobrist_33, 33);
+define_zobrist_test!(test_zobrist_34, 34);
+define_zobrist_test!(test_zobrist_35, 35);
+define_zobrist_test!(test_zobrist_36, 36);
+define_zobrist_test!(test_zobrist_37, 37);
+define_zobrist_test!(test_zobrist_38, 38);
+define_zobrist_test!(test_zobrist_39, 39);
+define_zobrist_test!(test_zobrist_40, 40);
+define_zobrist_test!(test_zobrist_41, 41);
+define_zobrist_test!(test_zobrist_42, 42);
+define_zobrist_test!(test_zobrist_43, 43);
+define_zobrist_test!(test_zobrist_44, 44);
+define_zobrist_test!(test_zobrist_45, 45);
+define_zobrist_test!(test_zobrist_46, 46);
+define_zobrist_test!(test_zobrist_47, 47);
+define_zobrist_test!(test_zobrist_48, 48);
+define_zobrist_test!(test_zobrist_49, 49);
+define_zobrist_test!(test_zobrist_50, 50);
+define_zobrist_test!(test_zobrist_51, 51);
+define_zobrist_test!(test_zobrist_52, 52);
+define_zobrist_test!(test_zobrist_53, 53);
+define_zobrist_test!(test_zobrist_54, 54);
+define_zobrist_test!(test_zobrist_55, 55);
+define_zobrist_test!(test_zobrist_56, 56);
+define_zobrist_test!(test_zobrist_57, 57);
+define_zobrist_test!(test_zobrist_58, 58);
+define_zobrist_test!(test_zobrist_59, 59);
+define_zobrist_test!(test_zobrist_60, 60);
+define_zobrist_test!(test_zobrist_61, 61);
+define_zobrist_test!(test_zobrist_62, 62);
+define_zobrist_test!(test_zobrist_63, 63);
+define_zobrist_test!(test_zobrist_64, 64);
+define_zobrist_test!(test_zobrist_65, 65);
+define_zobrist_test!(test_zobrist_66, 66);
+define_zobrist_test!(test_zobrist_67, 67);
+define_zobrist_test!(test_zobrist_68, 68);
+define_zobrist_test!(test_zobrist_69, 69);
+define_zobrist_test!(test_zobrist_70, 70);
+define_zobrist_test!(test_zobrist_71, 71);
+define_zobrist_test!(test_zobrist_72, 72);
+define_zobrist_test!(test_zobrist_73, 73);
+define_zobrist_test!(test_zobrist_74, 74);
+define_zobrist_test!(test_zobrist_75, 75);
+define_zobrist_test!(test_zobrist_76, 76);
+define_zobrist_test!(test_zobrist_77, 77);
+define_zobrist_test!(test_zobrist_78, 78);
+define_zobrist_test!(test_zobrist_79, 79);
+define_zobrist_test!(test_zobrist_80, 80);
+define_zobrist_test!(test_zobrist_81, 81);
+define_zobrist_test!(test_zobrist_82, 82);
+define_zobrist_test!(test_zobrist_83, 83);
+define_zobrist_test!(test_zobrist_84, 84);
+define_zobrist_test!(test_zobrist_85, 85);
+define_zobrist_test!(test_zobrist_86, 86);
+define_zobrist_test!(test_zobrist_87, 87);
+define_zobrist_test!(test_zobrist_88, 88);
+define_zobrist_test!(test_zobrist_89, 89);
+define_zobrist_test!(test_zobrist_90, 90);
+define_zobrist_test!(test_zobrist_91, 91);
+define_zobrist_test!(test_zobrist_92, 92);
+define_zobrist_test!(test_zobrist_93, 93);
+define_zobrist_test!(test_zobrist_94, 94);
+define_zobrist_test!(test_zobrist_95, 95);
+define_zobrist_test!(test_zobrist_96, 96);
+define_zobrist_test!(test_zobrist_97, 97);
+define_zobrist_test!(test_zobrist_98, 98);
+define_zobrist_test!(test_zobrist_99, 99);
+define_zobrist_test!(test_zobrist_100, 100);
+define_zobrist_test!(test_zobrist_101, 101);
+define_zobrist_test!(test_zobrist_102, 102);
+define_zobrist_test!(test_zobrist_103, 103);
+define_zobrist_test!(test_zobrist_104, 104);
+define_zobrist_test!(test_zobrist_105, 105);
+define_zobrist_test!(test_zobrist_106, 106);
+define_zobrist_test!(test_zobrist_107, 107);
+define_zobrist_test!(test_zobrist_108, 108);
+define_zobrist_test!(test_zobrist_109, 109);
+define_zobrist_test!(test_zobrist_110, 110);
+define_zobrist_test!(test_zobrist_111, 111);
+define_zobrist_test!(test_zobrist_112, 112);
+define_zobrist_test!(test_zobrist_113, 113);
+define_zobrist_test!(test_zobrist_114, 114);
+define_zobrist_test!(test_zobrist_115, 115);
+define_zobrist_test!(test_zobrist_116, 116);
+define_zobrist_test!(test_zobrist_117, 117);
+define_zobrist_test!(test_zobrist_118, 118);
+define_zobrist_test!(test_zobrist_119, 119);
+define_zobrist_test!(test_zobrist_120, 120);
+define_zobrist_test!(test_zobrist_121, 121);
+define_zobrist_test!(test_zobrist_122, 122);
+define_zobrist_test!(test_zobrist_123, 123);
+define_zobrist_test!(test_zobrist_124, 124);
+define_zobrist_test!(test_zobrist_125, 125);
+define_zobrist_test!(test_zobrist_126, 126);
+define_zobrist_test!(test_zobrist_127, 127);

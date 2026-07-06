@@ -9,6 +9,7 @@ const MASK_RANK_8: u64 = 0xff00000000000000;
 fn main() {
     generate_sliding_attack_tables();
     generate_line_between_table();
+    generate_zobrist_tables();
 }
 
 fn slide<F: Fn(u64) -> u64>(mut cur: u64, f: F, blockers: u64) -> u64 {
@@ -377,4 +378,47 @@ fn generate_line_between_table() {
 
         write!(file, "];\n\n").unwrap();
     }
+}
+
+fn generate_zobrist_tables() {
+    let mut file = std::fs::File::create("src/generated/zobrist.rs").unwrap();
+    let mut rng = PCG32::new(23823, 5);
+
+    gen_zobrist_table(&mut file, &mut rng, "EP_SQ", 64);
+    gen_zobrist_table(&mut file, &mut rng, "CASTLING", 256);
+
+    write!(file, "pub const PIECE_SQ: [[[u64;64];6];2] = [\n").unwrap();
+    for _ in 0..2 {
+        write!(file, "    [\n").unwrap();
+        for _ in 0..6 {
+            write!(file, "        [\n").unwrap();
+            for i in 0..64 {
+                if (i % 8) == 0 {
+                    write!(file, "            ").unwrap();
+                }
+
+                write!(file, "0x{:x}, ", rng.next64()).unwrap();
+
+                if ((i + 1) % 8) == 0 || i == 63 {
+                    write!(file, "\n").unwrap();
+                }
+            }
+            write!(file, "        ],\n").unwrap();
+        }
+        write!(file, "    ],\n").unwrap();
+    }
+    write!(file, "];\n\n").unwrap();
+
+    write!(
+        file,
+        "pub const BLACK_TO_MOVE: u64 = 0x{:x};\n\n",
+        rng.next64()
+    )
+    .unwrap();
+    write!(file, "pub const BASE: u64 = 0x{:x};\n\n", rng.next64()).unwrap();
+}
+
+fn gen_zobrist_table(file: &mut std::fs::File, rng: &mut PCG32, name: &str, n: usize) {
+    let table: Vec<u64> = (0..n).map(|_| rng.next64()).collect();
+    write_table(file, name, "u64", &table);
 }
