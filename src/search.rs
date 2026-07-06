@@ -280,7 +280,9 @@ impl Worker {
         let mut count = 1;
         let mut offset = 2;
 
-        while offset <= hm {
+        let max_offset = hm.min(self.pos_stack.len()-1);
+
+        while offset <= max_offset {
             let index = self.pos_stack.len() - 1 - offset;
 
             if self.pos_stack[index].hash == hash {
