@@ -16,12 +16,10 @@ fn main() {
     if let Some(opt) = args.get(1) {
         if opt == "bench" {
             bench_main();
-        }
-        else {
+        } else {
             println!("invalid option '{}'", opt);
         }
-    }
-    else {
+    } else {
         uci_main();
     }
 }
@@ -166,7 +164,7 @@ struct GoParams {
     binc: Option<f32>,
     depth: Option<usize>,
     nodes: Option<usize>,
-    movetime: Option<f32>
+    movetime: Option<f32>,
 }
 
 fn parse_ms(x: &str) -> Option<f32> {
@@ -191,41 +189,54 @@ fn parse_go(args: &[&str]) -> Result<GoParams, String> {
 
     while i < args.len() {
         if args[i] == "wtime" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
             params.wtime = Some(parse_ms(x).ok_or(format!("invalid value '{}'", x))?);
             i += 2;
-        }
-        else if args[i] == "btime" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
+        } else if args[i] == "btime" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
             params.btime = Some(parse_ms(x).ok_or(format!("invalid value '{}'", x))?);
             i += 2;
-        }
-        else if args[i] == "winc" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
+        } else if args[i] == "winc" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
             params.winc = Some(parse_ms(x).ok_or(format!("invalid value '{}'", x))?);
             i += 2;
-        }
-        else if args[i] == "binc" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
+        } else if args[i] == "binc" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
             params.binc = Some(parse_ms(x).ok_or(format!("invalid value '{}'", x))?);
             i += 2;
-        }
-        else if args[i] == "depth" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
-            params.depth = Some(x.parse::<usize>().map_err(|_|format!("invalid value '{}'", x))?);
+        } else if args[i] == "depth" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
+            params.depth = Some(
+                x.parse::<usize>()
+                    .map_err(|_| format!("invalid value '{}'", x))?,
+            );
             i += 2;
-        }
-        else if args[i] == "nodes" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
-            params.nodes = Some(x.parse::<usize>().map_err(|_|format!("invalid value '{}'", x))?);
+        } else if args[i] == "nodes" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
+            params.nodes = Some(
+                x.parse::<usize>()
+                    .map_err(|_| format!("invalid value '{}'", x))?,
+            );
             i += 2;
-        }
-        else if args[i] == "movetime" {
-            let &x = args.get(i+1).ok_or("unexpected end of command".to_string())?;
+        } else if args[i] == "movetime" {
+            let &x = args
+                .get(i + 1)
+                .ok_or("unexpected end of command".to_string())?;
             params.movetime = Some(parse_ms(x).ok_or(format!("invalid value '{}'", x))?);
             i += 2;
-        }
-        else {
+        } else {
             i += 1;
         }
     }
@@ -267,7 +278,7 @@ impl GoParams {
             soft_nodes: nodes,
             hard_time: hard_time * 0.9,
             soft_time: soft_time * 0.9,
-            depth: self.depth.unwrap_or(255) as i32
+            depth: self.depth.unwrap_or(255) as i32,
         }
     }
 }
@@ -278,7 +289,7 @@ fn bench_main() {
     let mut worker = search::Worker::new();
     let mut limits = search::Limits::new();
 
-    limits.depth = 4;
+    limits.depth = 6;
 
     worker.go(&pos, limits, Arc::new(atomic::AtomicBool::new(false)));
 

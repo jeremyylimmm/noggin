@@ -1,6 +1,6 @@
 use crate::*;
 
-const MATERIAL_VALUE: [Score; 6] = [100, 300, 350, 500, 900, 0];
+pub const MATERIAL_VALUE: [Score; 6] = [100, 300, 350, 500, 900, 0];
 
 pub fn evaluate(pos: &Position) -> Score {
     let mut score = 0;
