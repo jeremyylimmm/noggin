@@ -82,6 +82,10 @@ impl Worker {
             }
         }
 
+        if pos.halfmove_clock >= 100 {
+            return 0;
+        }
+
         let mut picker = MovePicker::new(&pos, moves);
 
         let mut best_score = if pos.checked().is_some() {
@@ -148,6 +152,10 @@ impl Worker {
             } else {
                 return 0;
             }
+        }
+
+        if pos.halfmove_clock >= 100 {
+            return 0;
         }
 
         let mut picker = MovePicker::new(&pos, moves);
@@ -280,7 +288,7 @@ impl Worker {
         let mut count = 1;
         let mut offset = 2;
 
-        let max_offset = hm.min(self.pos_stack.len()-1);
+        let max_offset = hm.min(self.pos_stack.len() - 1);
 
         while offset <= max_offset {
             let index = self.pos_stack.len() - 1 - offset;
