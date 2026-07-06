@@ -52,7 +52,7 @@ impl Worker {
             start_time: std::time::Instant::now(),
             stop: Arc::new(atomic::AtomicBool::new(false)),
             limits: Limits::new(),
-            pos_stack: vec![]
+            pos_stack: vec![],
         }
     }
 
@@ -119,13 +119,7 @@ impl Worker {
         best_score
     }
 
-    fn search(
-        &mut self,
-        mut alpha: Score,
-        beta: Score,
-        ply: usize,
-        depth: i32,
-    ) -> Score {
+    fn search(&mut self, mut alpha: Score, beta: Score, ply: usize, depth: i32) -> Score {
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
         }
@@ -209,7 +203,12 @@ impl Worker {
         (now - self.start_time).as_secs_f32()
     }
 
-    pub fn go(&mut self, pos_stack: Vec<Position>, limits: Limits, stop: Arc<atomic::AtomicBool>) -> Score {
+    pub fn go(
+        &mut self,
+        pos_stack: Vec<Position>,
+        limits: Limits,
+        stop: Arc<atomic::AtomicBool>,
+    ) -> Score {
         self.nodes = 0;
         self.stopped = false;
         self.stop = stop;
