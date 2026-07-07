@@ -34,16 +34,71 @@ impl Limits {
 }
 
 #[derive(Copy, Clone)]
+#[repr(u8)]
+enum TTKind {
+    Exact,
+    Lower,
+    Upper,
+}
+
+#[derive(Copy, Clone)]
 struct TTEntry {
+    kind: TTKind,
+    depth: u8,
     hash_lo: u16,
     mv: Move,
+    rel_score: i16,
 }
 
 impl TTEntry {
     const NULL: Self = TTEntry {
+        kind: TTKind::Exact,
+        depth: 0,
         hash_lo: 0,
         mv: Move::NULL,
+        rel_score: 0,
     };
+
+    fn cutoff(&self, ply: i32, alpha: Score, beta: Score) -> Option<Score> {
+        let score = self.score(ply);
+        match self.kind {
+            TTKind::Exact => {
+                if score > alpha && score < beta {
+                    Some(score)
+                } else {
+                    None
+                }
+            }
+            TTKind::Lower => {
+                if score > beta {
+                    Some(score)
+                } else {
+                    None
+                }
+            }
+            TTKind::Upper => {
+                if score < alpha {
+                    Some(score)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn score(&self, ply: i32) -> Score {
+        let rel = self.rel_score as Score;
+
+        if rel.is_mate() {
+            if rel < 0 {
+                rel + ply as Score
+            } else {
+                rel - ply as Score
+            }
+        } else {
+            rel
+        }
+    }
 }
 
 pub struct Worker {
@@ -88,6 +143,10 @@ impl Worker {
             return 0;
         }
 
+        let alpha0 = alpha;
+
+        let is_pv = beta > alpha + 1;
+
         if self.is_repetition(ply as _) {
             return 0;
         }
@@ -107,6 +166,10 @@ impl Worker {
         }
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
+            if !is_pv && let Some(cutoff_score) = entry.cutoff(ply as _, alpha, beta) {
+                return cutoff_score;
+            }
+
             entry.mv
         } else {
             Move::NULL
@@ -145,12 +208,23 @@ impl Worker {
             }
 
             if alpha >= beta {
-                self.tt_write(&pos, mv);
+                self.tt_write(&pos, 0, mv, ply as _, TTKind::Lower, best_score);
                 return best_score;
             }
         }
 
-        self.tt_write(&pos, best_mv);
+        self.tt_write(
+            &pos,
+            0,
+            best_mv,
+            ply as _,
+            if best_score > alpha0 {
+                TTKind::Exact
+            } else {
+                TTKind::Upper
+            },
+            best_score,
+        );
 
         best_score
     }
@@ -169,6 +243,8 @@ impl Worker {
         if self.check_stop() {
             return 0;
         }
+
+        let alpha0 = alpha;
 
         let is_pv = beta > alpha + 1;
 
@@ -193,6 +269,13 @@ impl Worker {
         }
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
+            if !is_pv
+                && entry.depth as i32 >= depth
+                && let Some(cut_score) = entry.cutoff(ply as _, alpha, beta)
+            {
+                return cut_score;
+            }
+
             entry.mv
         } else {
             Move::NULL
@@ -229,7 +312,7 @@ impl Worker {
             }
 
             if score > alpha {
-                if ply < self.pv.len() {
+                if is_pv && ply < self.pv.len() {
                     self.pv[ply][0] = mv;
 
                     if (ply + 1) < self.pv.len() {
@@ -251,12 +334,23 @@ impl Worker {
             }
 
             if alpha >= beta {
-                self.tt_write(&pos, mv);
+                self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
                 return best_score;
             }
         }
 
-        self.tt_write(&pos, best_mv);
+        self.tt_write(
+            &pos,
+            depth,
+            best_mv,
+            ply as _,
+            if best_score > alpha0 {
+                TTKind::Exact
+            } else {
+                TTKind::Upper
+            },
+            best_score,
+        );
 
         best_score
     }
@@ -404,12 +498,34 @@ impl Worker {
         }
     }
 
-    fn tt_write(&mut self, pos: &Position, mv: Move) {
+    fn tt_write(
+        &mut self,
+        pos: &Position,
+        depth: i32,
+        mv: Move,
+        ply: i32,
+        kind: TTKind,
+        score: Score,
+    ) {
         let idx = self.tt_index(pos);
         let entry = &mut self.tt[idx];
+
+        let rel_score = if score.is_mate() {
+            if score < 0 {
+                (score - ply) as i16
+            } else {
+                (score + ply) as i16
+            }
+        } else {
+            score as i16
+        };
+
         *entry = TTEntry {
+            kind,
+            depth: depth as _,
             hash_lo: pos.hash as u16,
             mv,
+            rel_score,
         };
     }
 }
