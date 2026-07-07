@@ -42,7 +42,7 @@ struct TTEntry {
 impl TTEntry {
     const NULL: Self = TTEntry {
         hash_lo: 0,
-        mv: Move::NULL
+        mv: Move::NULL,
     };
 }
 
@@ -108,8 +108,7 @@ impl Worker {
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             entry.mv
-        }
-        else {
+        } else {
             Move::NULL
         };
 
@@ -129,7 +128,7 @@ impl Worker {
 
         let mut best_mv = Move::NULL;
 
-        while let Some(mv) = picker.next() {
+        while let Some((_, mv)) = picker.next() {
             let child = pos.make_move(mv);
 
             self.pos_stack.push(child);
@@ -171,6 +170,8 @@ impl Worker {
             return 0;
         }
 
+        let is_pv = beta > alpha + 1;
+
         if self.is_repetition(ply as _) {
             return 0;
         }
@@ -193,8 +194,7 @@ impl Worker {
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             entry.mv
-        }
-        else {
+        } else {
             Move::NULL
         };
 
@@ -203,11 +203,21 @@ impl Worker {
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
 
-        while let Some(mv) = picker.next() {
+        while let Some((mv_index, mv)) = picker.next() {
             let child = pos.make_move(mv);
 
             self.pos_stack.push(child);
-            let score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+
+            let mut score = 0;
+
+            if !is_pv || mv_index > 0 {
+                score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1);
+            }
+
+            if is_pv && (mv_index == 0 || score > alpha) {
+                score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+            }
+
             self.pos_stack.pop();
 
             if self.stopped {
@@ -389,8 +399,7 @@ impl Worker {
 
         if entry.hash_lo == pos.hash as u16 {
             Some(entry)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -400,7 +409,7 @@ impl Worker {
         let entry = &mut self.tt[idx];
         *entry = TTEntry {
             hash_lo: pos.hash as u16,
-            mv
+            mv,
         };
     }
 }
@@ -443,15 +452,14 @@ impl MovePicker {
     fn score_move(pos: &Position, mv: Move, hash_mv: Move) -> i32 {
         if mv == hash_mv {
             MOVE_SCORE_HASH_MOVE
-        }
-        else if let Some((_, p)) = pos.capture(mv) {
+        } else if let Some((_, p)) = pos.capture(mv) {
             MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
         } else {
             MOVE_SCORE_NON_CAPTURE_BASE
         }
     }
 
-    fn next(&mut self) -> Option<Move> {
+    fn next(&mut self) -> Option<(usize, Move)> {
         if self.index >= self.moves.len() {
             None
         } else {
@@ -470,10 +478,12 @@ impl MovePicker {
             self.moves.swap(self.index, best_idx);
             self.scores.swap(self.index, best_idx);
 
-            let mv = self.moves[self.index];
+            let idx = self.index;
             self.index += 1;
 
-            Some(mv)
+            let mv = self.moves[idx];
+
+            Some((idx, mv))
         }
     }
 }

@@ -115,8 +115,7 @@ fn uci_main() {
                         } else {
                             println!("expected an int");
                         }
-                    }
-                    else if params.name == "Threads" {
+                    } else if params.name == "Threads" {
                         if let OptionValue::Int(v) = params.value {
                             if v != 1 {
                                 println!("out of bounds");
@@ -124,8 +123,7 @@ fn uci_main() {
                         } else {
                             println!("expected an int");
                         }
-                    }
-                    else {
+                    } else {
                         println!("unrecognized option");
                     }
                 }
