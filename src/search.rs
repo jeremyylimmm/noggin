@@ -42,7 +42,7 @@ struct TTEntry {
 impl TTEntry {
     const NULL: Self = TTEntry {
         hash_lo: 0,
-        mv: Move::NULL
+        mv: Move::NULL,
     };
 }
 
@@ -108,8 +108,7 @@ impl Worker {
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             entry.mv
-        }
-        else {
+        } else {
             Move::NULL
         };
 
@@ -195,8 +194,7 @@ impl Worker {
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             entry.mv
-        }
-        else {
+        } else {
             Move::NULL
         };
 
@@ -212,11 +210,11 @@ impl Worker {
 
             let mut score = 0;
 
-            if !is_pv || mv_index > 1 {
-                score = -self.search(-(alpha+1), -alpha, ply + 1, depth - 1);
+            if !is_pv || mv_index > 0 {
+                score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1);
             }
 
-            if is_pv && (mv_index==1 || score > alpha) {
+            if is_pv && (mv_index == 0 || score > alpha) {
                 score = -self.search(-beta, -alpha, ply + 1, depth - 1);
             }
 
@@ -401,8 +399,7 @@ impl Worker {
 
         if entry.hash_lo == pos.hash as u16 {
             Some(entry)
-        }
-        else {
+        } else {
             None
         }
     }
@@ -412,7 +409,7 @@ impl Worker {
         let entry = &mut self.tt[idx];
         *entry = TTEntry {
             hash_lo: pos.hash as u16,
-            mv
+            mv,
         };
     }
 }
@@ -455,8 +452,7 @@ impl MovePicker {
     fn score_move(pos: &Position, mv: Move, hash_mv: Move) -> i32 {
         if mv == hash_mv {
             MOVE_SCORE_HASH_MOVE
-        }
-        else if let Some((_, p)) = pos.capture(mv) {
+        } else if let Some((_, p)) = pos.capture(mv) {
             MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
         } else {
             MOVE_SCORE_NON_CAPTURE_BASE
