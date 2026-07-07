@@ -25,7 +25,11 @@ fn main() {
 }
 
 fn uci_main() {
-    let mut state = State::Idle(search::Worker::new());
+    let mut hash_size = 16;
+    const HASH_SIZE_MIN: usize = 1;
+    const HASH_SIZE_MAX: usize = 1024;
+
+    let mut state = State::Idle(search::Worker::new(hash_size));
     let mut pos_stack = vec![Position::from_fen(STARTPOS_FEN).unwrap()];
 
     loop {
@@ -40,7 +44,10 @@ fn uci_main() {
 
             println!("id name Noggin 3.0.1");
             println!("id author Noggin Authors");
-            println!("option name Hash type spin default 16 min 1 max 4096");
+            println!(
+                "option name Hash type spin default 16 min {} max {}",
+                HASH_SIZE_MIN, HASH_SIZE_MAX
+            );
             println!("option name Threads type spin default 1 min 1 max 1");
             println!("uciok");
 
@@ -53,8 +60,8 @@ fn uci_main() {
             state.flush();
             return;
         } else if args[0] == "ucinewgame" {
-            state.flush();
-            let worker = search::Worker::new();
+            let mut worker = state.flush();
+            worker.reset();
             pos_stack.clear();
             pos_stack.push(Position::from_fen(STARTPOS_FEN).unwrap());
             state = State::Idle(worker);
@@ -94,10 +101,44 @@ fn uci_main() {
             let w = state.flush();
             state = State::Idle(w);
         } else if args[0] == "setoption" {
-            let w = state.flush();
+            let mut w = state.flush();
+            match parse_setoption(&args) {
+                Ok(params) => {
+                    if params.name == "Hash" {
+                        if let OptionValue::Int(v) = params.value {
+                            if v < HASH_SIZE_MIN as i64 || v > HASH_SIZE_MAX as i64 {
+                                println!("out of bounds");
+                            } else {
+                                hash_size = v as _;
+                                w.resize_tt(hash_size);
+                            }
+                        } else {
+                            println!("expected an int");
+                        }
+                    }
+                    else if params.name == "Threads" {
+                        if let OptionValue::Int(v) = params.value {
+                            if v != 1 {
+                                println!("out of bounds");
+                            }
+                        } else {
+                            println!("expected an int");
+                        }
+                    }
+                    else {
+                        println!("unrecognized option");
+                    }
+                }
+
+                Err(msg) => {
+                    println!("{}", msg)
+                }
+            }
             state = State::Idle(w);
         } else {
+            let w = state.flush();
             println!("unrecognized command {}", args[0]);
+            state = State::Idle(w);
         }
     }
 }
@@ -292,7 +333,7 @@ impl GoParams {
 fn bench_main() {
     let pos = Position::from_fen(KIWIPETE_FEN).unwrap();
 
-    let mut worker = search::Worker::new();
+    let mut worker = search::Worker::new(16);
     let mut limits = search::Limits::new();
 
     limits.depth = 6;
@@ -305,4 +346,47 @@ fn bench_main() {
     let nps = nodes as f32 / elapsed;
 
     println!("{} nodes {} nps", nodes, nps as usize);
+}
+
+#[allow(dead_code)]
+enum OptionValue {
+    Int(i64),
+    String(String),
+}
+
+struct SetOptionParams {
+    name: String,
+    value: OptionValue,
+}
+
+fn parse_setoption(args: &[&str]) -> Result<SetOptionParams, String> {
+    assert!(args[0] == "setoption");
+
+    let mut name = None;
+    let mut value = None;
+
+    let mut i = 1;
+
+    while i < args.len() {
+        if args[i] == "name" {
+            let &x = args.get(i + 1).ok_or("expected a name")?;
+            name = Some(x.to_string());
+            i += 2;
+        } else if args[i] == "value" {
+            let &x = args.get(i + 1).ok_or("expected a value")?;
+            value = Some(if let Ok(int) = x.parse::<i64>() {
+                OptionValue::Int(int)
+            } else {
+                OptionValue::String(x.to_string())
+            });
+            i += 2
+        } else {
+            i += 1;
+        }
+    }
+
+    let name = name.ok_or("no name given")?;
+    let value = value.ok_or("no value given")?;
+
+    Ok(SetOptionParams { name, value })
 }

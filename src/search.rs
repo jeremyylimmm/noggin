@@ -4,6 +4,10 @@ use crate::*;
 
 const MAX_PLY: usize = 128;
 
+const MOVE_SCORE_HASH_MOVE: i32 = 30_000_000;
+const MOVE_SCORE_CAPTURE_BASE: i32 = 20_000_000;
+const MOVE_SCORE_NON_CAPTURE_BASE: i32 = 10_000_000;
+
 #[derive(Copy, Clone)]
 pub struct Limits {
     pub hard_nodes: usize,
@@ -29,8 +33,23 @@ impl Limits {
     }
 }
 
+#[derive(Copy, Clone)]
+struct TTEntry {
+    hash_lo: u16,
+    mv: Move,
+}
+
+impl TTEntry {
+    const NULL: Self = TTEntry {
+        hash_lo: 0,
+        mv: Move::NULL
+    };
+}
+
 pub struct Worker {
     pv: [[Move; MAX_PLY]; MAX_PLY],
+
+    tt: Vec<TTEntry>,
 
     nodes: usize,
     stopped: bool,
@@ -44,9 +63,10 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn new() -> Self {
+    pub fn new(tt_size_mb: usize) -> Self {
         Self {
             pv: [[Move::NULL; _]; _],
+            tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
             nodes: 0,
             stopped: false,
             start_time: std::time::Instant::now(),
@@ -86,7 +106,14 @@ impl Worker {
             return 0;
         }
 
-        let mut picker = MovePicker::new(&pos, moves);
+        let hash_mv = if let Some(entry) = self.tt_query(&pos) {
+            entry.mv
+        }
+        else {
+            Move::NULL
+        };
+
+        let mut picker = MovePicker::new(&pos, moves, hash_mv);
 
         let mut best_score = if pos.checked().is_some() {
             -INF_SCORE
@@ -100,6 +127,8 @@ impl Worker {
             stand_pat
         };
 
+        let mut best_mv = Move::NULL;
+
         while let Some(mv) = picker.next() {
             let child = pos.make_move(mv);
 
@@ -112,13 +141,17 @@ impl Worker {
             }
 
             if score > alpha {
+                best_mv = mv;
                 alpha = score;
             }
 
             if alpha >= beta {
+                self.tt_write(&pos, mv);
                 return best_score;
             }
         }
+
+        self.tt_write(&pos, best_mv);
 
         best_score
     }
@@ -158,9 +191,17 @@ impl Worker {
             return 0;
         }
 
-        let mut picker = MovePicker::new(&pos, moves);
+        let hash_mv = if let Some(entry) = self.tt_query(&pos) {
+            entry.mv
+        }
+        else {
+            Move::NULL
+        };
+
+        let mut picker = MovePicker::new(&pos, moves, hash_mv);
 
         let mut best_score = -INF_SCORE;
+        let mut best_mv = Move::NULL;
 
         while let Some(mv) = picker.next() {
             let child = pos.make_move(mv);
@@ -195,15 +236,28 @@ impl Worker {
                     }
                 }
 
+                best_mv = mv;
                 alpha = score;
             }
 
             if alpha >= beta {
+                self.tt_write(&pos, mv);
                 return best_score;
             }
         }
 
+        self.tt_write(&pos, best_mv);
+
         best_score
+    }
+
+    pub fn resize_tt(&mut self, size_mb: usize) {
+        let new_len = tt_len(size_mb);
+        self.tt = vec![TTEntry::NULL; new_len];
+    }
+
+    pub fn reset(&mut self) {
+        self.tt.fill(TTEntry::NULL);
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -325,6 +379,30 @@ impl Worker {
     pub fn nodes(&self) -> usize {
         self.nodes
     }
+
+    fn tt_index(&self, pos: &Position) -> usize {
+        pos.hash.carrying_mul(self.tt.len() as _, 0).1 as usize
+    }
+
+    fn tt_query(&self, pos: &Position) -> Option<TTEntry> {
+        let entry = self.tt[self.tt_index(pos)];
+
+        if entry.hash_lo == pos.hash as u16 {
+            Some(entry)
+        }
+        else {
+            None
+        }
+    }
+
+    fn tt_write(&mut self, pos: &Position, mv: Move) {
+        let idx = self.tt_index(pos);
+        let entry = &mut self.tt[idx];
+        *entry = TTEntry {
+            hash_lo: pos.hash as u16,
+            mv
+        };
+    }
 }
 
 fn relative_eval(pos: &Position) -> Score {
@@ -348,11 +426,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList) -> Self {
+    fn new(pos: &Position, moves: MoveList, hash_mv: Move) -> Self {
         let mut scores = [0; _];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i]);
+            scores[i] = Self::score_move(pos, moves[i], hash_mv);
         }
 
         Self {
@@ -362,11 +440,14 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move) -> i32 {
-        if let Some((_, p)) = pos.capture(mv) {
-            p.material_value() - p.id() as i32
+    fn score_move(pos: &Position, mv: Move, hash_mv: Move) -> i32 {
+        if mv == hash_mv {
+            MOVE_SCORE_HASH_MOVE
+        }
+        else if let Some((_, p)) = pos.capture(mv) {
+            MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
         } else {
-            0
+            MOVE_SCORE_NON_CAPTURE_BASE
         }
     }
 
@@ -395,4 +476,10 @@ impl MovePicker {
             Some(mv)
         }
     }
+}
+
+fn tt_len(size_mb: usize) -> usize {
+    let bytes = size_mb * 1024 * 1024;
+    let n = bytes / std::mem::size_of::<TTEntry>();
+    n.max(1024)
 }
