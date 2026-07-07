@@ -129,7 +129,7 @@ impl Worker {
 
         let mut best_mv = Move::NULL;
 
-        while let Some(mv) = picker.next() {
+        while let Some((_, mv)) = picker.next() {
             let child = pos.make_move(mv);
 
             self.pos_stack.push(child);
@@ -171,6 +171,8 @@ impl Worker {
             return 0;
         }
 
+        let is_pv = beta > alpha + 1;
+
         if self.is_repetition(ply as _) {
             return 0;
         }
@@ -203,11 +205,21 @@ impl Worker {
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
 
-        while let Some(mv) = picker.next() {
+        while let Some((mv_index, mv)) = picker.next() {
             let child = pos.make_move(mv);
 
             self.pos_stack.push(child);
-            let score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+
+            let mut score = 0;
+
+            if !is_pv || mv_index > 1 {
+                score = -self.search(-(alpha+1), -alpha, ply + 1, depth - 1);
+            }
+
+            if is_pv && (mv_index==1 || score > alpha) {
+                score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+            }
+
             self.pos_stack.pop();
 
             if self.stopped {
@@ -451,7 +463,7 @@ impl MovePicker {
         }
     }
 
-    fn next(&mut self) -> Option<Move> {
+    fn next(&mut self) -> Option<(usize, Move)> {
         if self.index >= self.moves.len() {
             None
         } else {
@@ -470,10 +482,12 @@ impl MovePicker {
             self.moves.swap(self.index, best_idx);
             self.scores.swap(self.index, best_idx);
 
-            let mv = self.moves[self.index];
+            let idx = self.index;
             self.index += 1;
 
-            Some(mv)
+            let mv = self.moves[idx];
+
+            Some((idx, mv))
         }
     }
 }
