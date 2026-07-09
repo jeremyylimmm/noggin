@@ -125,7 +125,7 @@ impl Worker {
         Self {
             pv: Box::new([[Move::NULL; _]; _]),
             tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
-            butterfly_hist: Box::new([[[0; _]; _];_]),
+            butterfly_hist: Box::new([[[0; _]; _]; _]),
             nodes: 0,
             stopped: false,
             start_time: std::time::Instant::now(),
@@ -379,7 +379,7 @@ impl Worker {
 
     pub fn reset(&mut self) {
         self.tt.fill(TTEntry::NULL);
-        self.butterfly_hist.fill([[0;_];_]);
+        self.butterfly_hist.fill([[0; _]; _]);
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -589,7 +589,8 @@ impl MovePicker {
         } else if let Some((_, p)) = pos.capture(mv) {
             MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
         } else {
-            MOVE_SCORE_NON_CAPTURE_BASE + worker.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()] as i32
+            MOVE_SCORE_NON_CAPTURE_BASE
+                + worker.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()] as i32
         }
     }
 
