@@ -102,7 +102,7 @@ impl TTEntry {
 }
 
 pub struct Worker {
-    pv: [[Move; MAX_PLY]; MAX_PLY],
+    pv: Box<[[Move; MAX_PLY]; MAX_PLY]>,
 
     tt: Vec<TTEntry>,
 
@@ -120,7 +120,7 @@ pub struct Worker {
 impl Worker {
     pub fn new(tt_size_mb: usize) -> Self {
         Self {
-            pv: [[Move::NULL; _]; _],
+            pv: Box::new([[Move::NULL; _]; _]),
             tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
             nodes: 0,
             stopped: false,
