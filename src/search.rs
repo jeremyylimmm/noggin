@@ -295,10 +295,13 @@ impl Worker {
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
 
+        let mut quiets = MoveList::new();
+
         while let Some((mv_index, mv)) = picker.next() {
             let child = pos.make_move(mv);
 
             let capture = pos.capture(mv);
+            let quiet = capture.is_none();
 
             self.pos_stack.push(child);
 
@@ -345,14 +348,22 @@ impl Worker {
             }
 
             if alpha >= beta {
-                if capture.is_none() {
+                if quiet {
                     let bonus = 300 * depth - 250;
                     self.update_butterfly_hist(&pos, mv, bonus);
+
+                    for q in quiets {
+                        self.update_butterfly_hist(&pos, q, -bonus);
+                    }
                 }
 
                 self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
 
                 return best_score;
+            }
+
+            if quiet {
+                quiets.push(mv);
             }
         }
 
