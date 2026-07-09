@@ -1357,3 +1357,160 @@ define_zobrist_test!(test_zobrist_124, 124);
 define_zobrist_test!(test_zobrist_125, 125);
 define_zobrist_test!(test_zobrist_126, 126);
 define_zobrist_test!(test_zobrist_127, 127);
+
+fn test_eval(pos: &Position, depth: i32) {
+    assert_eq!(pos.evaluate(), eval::evaluate(pos));
+
+    if depth > 0 {
+        let moves = pos.gen_legal_moves();
+
+        for mv in moves {
+            let child = pos.make_move(mv);
+            test_eval(&child, depth - 1);
+        }
+    }
+}
+
+fn test_eval_from_position(index: usize) {
+    let (fen, _) = FENS[index];
+    let pos = Position::from_fen(fen).unwrap();
+    test_eval(&pos, 5);
+}
+
+macro_rules! define_eval_test {
+    ($name:ident, $index: expr) => {
+        #[test]
+        fn $name() {
+            test_eval_from_position($index);
+        }
+    };
+}
+
+define_eval_test!(test_eval_0, 0);
+define_eval_test!(test_eval_1, 1);
+define_eval_test!(test_eval_2, 2);
+define_eval_test!(test_eval_3, 3);
+define_eval_test!(test_eval_4, 4);
+define_eval_test!(test_eval_5, 5);
+define_eval_test!(test_eval_6, 6);
+define_eval_test!(test_eval_7, 7);
+define_eval_test!(test_eval_8, 8);
+define_eval_test!(test_eval_9, 9);
+define_eval_test!(test_eval_10, 10);
+define_eval_test!(test_eval_11, 11);
+define_eval_test!(test_eval_12, 12);
+define_eval_test!(test_eval_13, 13);
+define_eval_test!(test_eval_14, 14);
+define_eval_test!(test_eval_15, 15);
+define_eval_test!(test_eval_16, 16);
+define_eval_test!(test_eval_17, 17);
+define_eval_test!(test_eval_18, 18);
+define_eval_test!(test_eval_19, 19);
+define_eval_test!(test_eval_20, 20);
+define_eval_test!(test_eval_21, 21);
+define_eval_test!(test_eval_22, 22);
+define_eval_test!(test_eval_23, 23);
+define_eval_test!(test_eval_24, 24);
+define_eval_test!(test_eval_25, 25);
+define_eval_test!(test_eval_26, 26);
+define_eval_test!(test_eval_27, 27);
+define_eval_test!(test_eval_28, 28);
+define_eval_test!(test_eval_29, 29);
+define_eval_test!(test_eval_30, 30);
+define_eval_test!(test_eval_31, 31);
+define_eval_test!(test_eval_32, 32);
+define_eval_test!(test_eval_33, 33);
+define_eval_test!(test_eval_34, 34);
+define_eval_test!(test_eval_35, 35);
+define_eval_test!(test_eval_36, 36);
+define_eval_test!(test_eval_37, 37);
+define_eval_test!(test_eval_38, 38);
+define_eval_test!(test_eval_39, 39);
+define_eval_test!(test_eval_40, 40);
+define_eval_test!(test_eval_41, 41);
+define_eval_test!(test_eval_42, 42);
+define_eval_test!(test_eval_43, 43);
+define_eval_test!(test_eval_44, 44);
+define_eval_test!(test_eval_45, 45);
+define_eval_test!(test_eval_46, 46);
+define_eval_test!(test_eval_47, 47);
+define_eval_test!(test_eval_48, 48);
+define_eval_test!(test_eval_49, 49);
+define_eval_test!(test_eval_50, 50);
+define_eval_test!(test_eval_51, 51);
+define_eval_test!(test_eval_52, 52);
+define_eval_test!(test_eval_53, 53);
+define_eval_test!(test_eval_54, 54);
+define_eval_test!(test_eval_55, 55);
+define_eval_test!(test_eval_56, 56);
+define_eval_test!(test_eval_57, 57);
+define_eval_test!(test_eval_58, 58);
+define_eval_test!(test_eval_59, 59);
+define_eval_test!(test_eval_60, 60);
+define_eval_test!(test_eval_61, 61);
+define_eval_test!(test_eval_62, 62);
+define_eval_test!(test_eval_63, 63);
+define_eval_test!(test_eval_64, 64);
+define_eval_test!(test_eval_65, 65);
+define_eval_test!(test_eval_66, 66);
+define_eval_test!(test_eval_67, 67);
+define_eval_test!(test_eval_68, 68);
+define_eval_test!(test_eval_69, 69);
+define_eval_test!(test_eval_70, 70);
+define_eval_test!(test_eval_71, 71);
+define_eval_test!(test_eval_72, 72);
+define_eval_test!(test_eval_73, 73);
+define_eval_test!(test_eval_74, 74);
+define_eval_test!(test_eval_75, 75);
+define_eval_test!(test_eval_76, 76);
+define_eval_test!(test_eval_77, 77);
+define_eval_test!(test_eval_78, 78);
+define_eval_test!(test_eval_79, 79);
+define_eval_test!(test_eval_80, 80);
+define_eval_test!(test_eval_81, 81);
+define_eval_test!(test_eval_82, 82);
+define_eval_test!(test_eval_83, 83);
+define_eval_test!(test_eval_84, 84);
+define_eval_test!(test_eval_85, 85);
+define_eval_test!(test_eval_86, 86);
+define_eval_test!(test_eval_87, 87);
+define_eval_test!(test_eval_88, 88);
+define_eval_test!(test_eval_89, 89);
+define_eval_test!(test_eval_90, 90);
+define_eval_test!(test_eval_91, 91);
+define_eval_test!(test_eval_92, 92);
+define_eval_test!(test_eval_93, 93);
+define_eval_test!(test_eval_94, 94);
+define_eval_test!(test_eval_95, 95);
+define_eval_test!(test_eval_96, 96);
+define_eval_test!(test_eval_97, 97);
+define_eval_test!(test_eval_98, 98);
+define_eval_test!(test_eval_99, 99);
+define_eval_test!(test_eval_100, 100);
+define_eval_test!(test_eval_101, 101);
+define_eval_test!(test_eval_102, 102);
+define_eval_test!(test_eval_103, 103);
+define_eval_test!(test_eval_104, 104);
+define_eval_test!(test_eval_105, 105);
+define_eval_test!(test_eval_106, 106);
+define_eval_test!(test_eval_107, 107);
+define_eval_test!(test_eval_108, 108);
+define_eval_test!(test_eval_109, 109);
+define_eval_test!(test_eval_110, 110);
+define_eval_test!(test_eval_111, 111);
+define_eval_test!(test_eval_112, 112);
+define_eval_test!(test_eval_113, 113);
+define_eval_test!(test_eval_114, 114);
+define_eval_test!(test_eval_115, 115);
+define_eval_test!(test_eval_116, 116);
+define_eval_test!(test_eval_117, 117);
+define_eval_test!(test_eval_118, 118);
+define_eval_test!(test_eval_119, 119);
+define_eval_test!(test_eval_120, 120);
+define_eval_test!(test_eval_121, 121);
+define_eval_test!(test_eval_122, 122);
+define_eval_test!(test_eval_123, 123);
+define_eval_test!(test_eval_124, 124);
+define_eval_test!(test_eval_125, 125);
+define_eval_test!(test_eval_126, 126);
+define_eval_test!(test_eval_127, 127);

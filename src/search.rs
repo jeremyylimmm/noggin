@@ -531,7 +531,7 @@ impl Worker {
 }
 
 fn relative_eval(pos: &Position) -> Score {
-    eval::evaluate(pos) * pos.stm.sign()
+    pos.evaluate() * pos.stm.sign()
 }
 
 trait ScoreType {

@@ -20,6 +20,7 @@ const MG_PAWN_TABLE: [Score; 64] = [
 const EG_PAWN_TABLE: [Score; 64] = [
       0,   0,   0,   0,   0,   0,   0,   0,
     178, 173, 158, 134, 147, 132, 165, 187,
+
      94, 100,  85,  67,  56,  53,  82,  84,
      32,  24,  13,   5,  -2,   4,  17,  17,
      13,   9,  -3,  -7,  -7,  -8,   3,  -1,
@@ -158,7 +159,7 @@ const EG_PESTO_TABLE: [&[Score]; 6] = [
 
 const GAMEPHASE_INC: [i32; 12] = [0,0,1,1,1,1,2,2,4,4,0,0];
 
-pub fn evaluate(pos: &Position) -> Score {
+pub fn compute(pos: &Position) -> (Score, Score, i32) {
     let mut mg = [0; 2];
     let mut eg = [0; 2];
 
@@ -182,8 +183,56 @@ pub fn evaluate(pos: &Position) -> Score {
     /* tapered eval */
     let mg_score = mg[0] - mg[1];
     let eg_score = eg[0] - eg[1];
+
+    return (mg_score, eg_score, game_phase);
+}
+
+
+pub fn evaluate(pos: &Position) -> Score {
+    let (mg_score, eg_score, game_phase) = compute(pos);
+
     let mg_phase = game_phase.min(24);
     let eg_phase = 24 - mg_phase;
 
     return (mg_score * mg_phase + eg_score * eg_phase) / 24;
+}
+
+#[derive(Copy, Clone)]
+pub struct State {
+    mg: Score,
+    eg: Score,
+    game_phase: i32
+}
+
+impl State {
+    pub fn zeroed() -> Self {
+        Self {
+            mg: 0,
+            eg: 0,
+            game_phase: 0
+        }
+    }
+
+    pub fn new(pos: &Position) -> Self {
+        let (mg, eg, game_phase) = compute(pos);
+        Self {
+            mg,
+            eg,
+            game_phase
+        }
+    }
+
+    pub fn get(&self) -> Score {
+        let mg_phase = self.game_phase.min(24);
+        let eg_phase = 24 - mg_phase;
+
+        (self.mg * mg_phase + self.eg * eg_phase) / 24
+    }
+
+    pub fn update<const SIGN: i32>(&mut self, pc: Piece, side: Side, sq: Sq) {
+        let rel_sq = if side == Side::White { Sq(sq.0 ^ 56) } else { sq };
+        self.mg += SIGN * side.sign() * (MG_PESTO_TABLE[pc.id()][rel_sq.id()] + MG_VALUE[pc.id()]);
+        self.eg += SIGN * side.sign() * (EG_PESTO_TABLE[pc.id()][rel_sq.id()] + EG_VALUE[pc.id()]);
+        self.game_phase += SIGN * GAMEPHASE_INC[pc.id()];
+    }
 }
