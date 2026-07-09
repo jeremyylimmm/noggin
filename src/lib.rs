@@ -705,7 +705,7 @@ impl Piece {
     }
 
     pub fn material_value(&self) -> Score {
-        eval::MATERIAL_VALUE[self.id()]
+        eval::MG_VALUE[self.id()]
     }
 
     fn from_id(id: usize) -> Option<Self> {
