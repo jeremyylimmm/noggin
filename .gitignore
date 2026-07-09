@@ -4,4 +4,4 @@
 /src/generated/*
 !/src/generated/mod.rs
 
-/.vscode
+.vscode
