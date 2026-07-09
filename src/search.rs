@@ -8,6 +8,8 @@ const MOVE_SCORE_HASH_MOVE: i32 = 30_000_000;
 const MOVE_SCORE_CAPTURE_BASE: i32 = 20_000_000;
 const MOVE_SCORE_NON_CAPTURE_BASE: i32 = 10_000_000;
 
+const MAX_HISTORY: i32 = 30_000;
+
 #[derive(Copy, Clone)]
 pub struct Limits {
     pub hard_nodes: usize,
@@ -105,6 +107,7 @@ pub struct Worker {
     pv: Box<[[Move; MAX_PLY]; MAX_PLY]>,
 
     tt: Vec<TTEntry>,
+    butterfly_hist: Box<[[[i16; 64]; 64]; 2]>,
 
     nodes: usize,
     stopped: bool,
@@ -122,6 +125,7 @@ impl Worker {
         Self {
             pv: Box::new([[Move::NULL; _]; _]),
             tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
+            butterfly_hist: Box::new([[[0; _]; _];_]),
             nodes: 0,
             stopped: false,
             start_time: std::time::Instant::now(),
@@ -134,6 +138,11 @@ impl Worker {
     pub fn pv(&self) -> &[Move] {
         let len = self.pv[0].iter().take_while(|&x| *x != Move::NULL).count();
         &self.pv[0][..len]
+    }
+
+    pub fn update_butterfly_hist(&mut self, pos: &Position, mv: Move, bonus: i32) {
+        let val = &mut self.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()];
+        apply_gravity(val, bonus);
     }
 
     fn qsearch(&mut self, mut alpha: Score, beta: Score, ply: usize) -> Score {
@@ -175,7 +184,7 @@ impl Worker {
             Move::NULL
         };
 
-        let mut picker = MovePicker::new(&pos, moves, hash_mv);
+        let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
 
         let mut best_score = if pos.checked().is_some() {
             -INF_SCORE
@@ -281,13 +290,15 @@ impl Worker {
             Move::NULL
         };
 
-        let mut picker = MovePicker::new(&pos, moves, hash_mv);
+        let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
 
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
 
         while let Some((mv_index, mv)) = picker.next() {
             let child = pos.make_move(mv);
+
+            let capture = pos.capture(mv);
 
             self.pos_stack.push(child);
 
@@ -334,7 +345,13 @@ impl Worker {
             }
 
             if alpha >= beta {
+                if capture.is_none() {
+                    let bonus = 300 * depth - 250;
+                    self.update_butterfly_hist(&pos, mv, bonus);
+                }
+
                 self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
+
                 return best_score;
             }
         }
@@ -362,6 +379,7 @@ impl Worker {
 
     pub fn reset(&mut self) {
         self.tt.fill(TTEntry::NULL);
+        self.butterfly_hist.fill([[0;_];_]);
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -551,11 +569,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList, hash_mv: Move) -> Self {
+    fn new(pos: &Position, moves: MoveList, hash_mv: Move, worker: &Worker) -> Self {
         let mut scores = [0; _];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i], hash_mv);
+            scores[i] = Self::score_move(pos, moves[i], hash_mv, worker);
         }
 
         Self {
@@ -565,13 +583,13 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move, hash_mv: Move) -> i32 {
+    fn score_move(pos: &Position, mv: Move, hash_mv: Move, worker: &Worker) -> i32 {
         if mv == hash_mv {
             MOVE_SCORE_HASH_MOVE
         } else if let Some((_, p)) = pos.capture(mv) {
             MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
         } else {
-            MOVE_SCORE_NON_CAPTURE_BASE
+            MOVE_SCORE_NON_CAPTURE_BASE + worker.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()] as i32
         }
     }
 
@@ -608,4 +626,10 @@ fn tt_len(size_mb: usize) -> usize {
     let bytes = size_mb * 1024 * 1024;
     let n = bytes / std::mem::size_of::<TTEntry>();
     n.max(1024)
+}
+
+fn apply_gravity(val: &mut i16, bonus: i32) {
+    let clamped_bonus = bonus.clamp(-MAX_HISTORY, MAX_HISTORY);
+    let new_value = *val as i32 + clamped_bonus - (*val as i32) * clamped_bonus.abs() / MAX_HISTORY;
+    *val = new_value as i16;
 }
