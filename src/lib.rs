@@ -128,7 +128,7 @@ pub struct Position {
     pins: u64,
     checkers: u64,
     hash: u64,
-    eval_state: eval::State
+    eval_state: eval::State,
 }
 
 impl Position {
@@ -342,7 +342,9 @@ impl Position {
         *result.bbs.get_mut(piece_start, self.stm) ^= mv.from().bb();
         result.board[mv.from()] = None;
 
-        result.eval_state.update::<-1>(piece_start, self.stm, mv.from());
+        result
+            .eval_state
+            .update::<-1>(piece_start, self.stm, mv.from());
         result.hash ^= zobrist::PIECE_SQ[self.stm.id()][piece_start.id()][mv.from().id()];
 
         if let Some((cap_sq, cap_piece)) = capture {
@@ -350,7 +352,9 @@ impl Position {
             *result.bbs.get_mut(cap_piece, self.stm.opp()) ^= cap_sq.bb();
             result.board[cap_sq] = None;
 
-            result.eval_state.update::<-1>(cap_piece, self.stm.opp(), cap_sq);
+            result
+                .eval_state
+                .update::<-1>(cap_piece, self.stm.opp(), cap_sq);
             result.hash ^= zobrist::PIECE_SQ[self.stm.opp().id()][cap_piece.id()][cap_sq.id()];
         }
 
@@ -365,8 +369,12 @@ impl Position {
             result.board[rook_from] = None;
             result.board[rook_to] = Some(Piece::Rook);
 
-            result.eval_state.update::<-1>(Piece::Rook, self.stm, rook_from);
-            result.eval_state.update::<1>(Piece::Rook, self.stm, rook_to);
+            result
+                .eval_state
+                .update::<-1>(Piece::Rook, self.stm, rook_from);
+            result
+                .eval_state
+                .update::<1>(Piece::Rook, self.stm, rook_to);
             result.hash ^= zobrist::PIECE_SQ[self.stm.id()][Piece::Rook.id()][rook_from.id()]
                 ^ zobrist::PIECE_SQ[self.stm.id()][Piece::Rook.id()][rook_to.id()];
         }
