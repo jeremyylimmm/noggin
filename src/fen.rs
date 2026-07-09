@@ -160,10 +160,12 @@ pub fn parse(fen: &str) -> Result<Position, String> {
         pins: 0,
         checkers: 0,
         hash: 0,
+        eval_state: eval::State::zeroed(),
     };
 
     pos.update_threats_checkers_ep_and_pins();
     pos.hash = pos.compute_hash();
+    pos.eval_state = eval::State::new(&pos);
 
     Ok(pos)
 }
