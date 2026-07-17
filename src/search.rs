@@ -417,7 +417,32 @@ impl Worker {
         let mut root_pv = [Move::NULL; MAX_PLY];
 
         for d in 1..=self.limits.depth {
-            let score = self.search(-INF_SCORE, INF_SCORE, 0, d);
+            let mut lo = 25;
+            let mut hi = 25;
+
+            let score = loop {
+                let (alpha, beta) = if d < 4 {
+                    (-INF_SCORE, INF_SCORE)
+                }
+                else {
+                    (
+                        (root_score - lo).clamp(-INF_SCORE, INF_SCORE),
+                        (root_score + hi).clamp(-INF_SCORE, INF_SCORE)
+                    )
+                };
+
+                let score = self.search(alpha, beta, 0, d);
+
+                if score > alpha && score < beta {
+                    break score;
+                }
+                else if score <= alpha {
+                    lo *= 2;
+                }
+                else {
+                    hi *= 2;
+                }
+            };
 
             if self.stopped {
                 break;
