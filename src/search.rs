@@ -278,6 +278,16 @@ impl Worker {
             Move::NULL
         };
 
+        let moves = pos.gen_legal_moves();
+
+        if moves.len() == 0 {
+            if pos.checked().is_some() {
+                return -MATE_SCORE + (ply as Score);
+            } else {
+                return 0;
+            }
+        }
+
         if pos.halfmove_clock >= 100 {
             return 0;
         }
@@ -287,16 +297,6 @@ impl Worker {
 
         if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
             return static_eval;
-        }
-
-        let moves = pos.gen_legal_moves();
-
-        if moves.len() == 0 {
-            if pos.checked().is_some() {
-                return -MATE_SCORE + (ply as Score);
-            } else {
-                return 0;
-            }
         }
 
         let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
