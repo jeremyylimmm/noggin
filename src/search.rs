@@ -254,7 +254,6 @@ impl Worker {
         }
 
         let alpha0 = alpha;
-
         let is_pv = beta > alpha + 1;
 
         if self.is_repetition(ply as _) {
@@ -263,19 +262,8 @@ impl Worker {
 
         let pos = self.pos_stack.last().unwrap().clone();
 
-        let moves = pos.gen_legal_moves();
-
-        if moves.len() == 0 {
-            if pos.checked().is_some() {
-                return -MATE_SCORE + (ply as Score);
-            } else {
-                return 0;
-            }
-        }
-
-        if pos.halfmove_clock >= 100 {
-            return 0;
-        }
+        let static_eval = relative_eval(&pos);
+        let in_check = pos.checked().is_some();
 
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             if !is_pv
@@ -289,6 +277,27 @@ impl Worker {
         } else {
             Move::NULL
         };
+
+        if pos.halfmove_clock >= 100 {
+            return 0;
+        }
+
+        let can_rfp = !in_check && !is_pv && hash_mv != Move::NULL;
+        let rfp_margin = 150 * depth;
+
+        if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
+            return static_eval;
+        }
+
+        let moves = pos.gen_legal_moves();
+
+        if moves.len() == 0 {
+            if pos.checked().is_some() {
+                return -MATE_SCORE + (ply as Score);
+            } else {
+                return 0;
+            }
+        }
 
         let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
 
