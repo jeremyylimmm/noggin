@@ -222,12 +222,14 @@ impl Worker {
             }
         }
 
+        let mv_is_pv = best_score > alpha0;
+
         self.tt_write(
             &pos,
             0,
-            best_mv,
+            if mv_is_pv { best_mv } else { Move::NULL },
             ply as _,
-            if best_score > alpha0 {
+            if mv_is_pv {
                 TTKind::Exact
             } else {
                 TTKind::Upper
@@ -376,12 +378,14 @@ impl Worker {
             }
         }
 
+        let mv_is_pv = best_score > alpha0;
+
         self.tt_write(
             &pos,
             depth,
-            best_mv,
+            if mv_is_pv { best_mv } else { Move::NULL },
             ply as _,
-            if best_score > alpha0 {
+            if mv_is_pv {
                 TTKind::Exact
             } else {
                 TTKind::Upper
@@ -432,11 +436,10 @@ impl Worker {
             let score = loop {
                 let (alpha, beta) = if d < 4 {
                     (-INF_SCORE, INF_SCORE)
-                }
-                else {
+                } else {
                     (
                         (root_score - lo).clamp(-INF_SCORE, INF_SCORE),
-                        (root_score + hi).clamp(-INF_SCORE, INF_SCORE)
+                        (root_score + hi).clamp(-INF_SCORE, INF_SCORE),
                     )
                 };
 
@@ -444,11 +447,9 @@ impl Worker {
 
                 if score > alpha && score < beta {
                     break score;
-                }
-                else if score <= alpha {
+                } else if score <= alpha {
                     lo *= 2;
-                }
-                else {
+                } else {
                     hi *= 2;
                 }
             };
