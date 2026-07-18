@@ -1211,6 +1211,10 @@ fn test_zobrist(pos: &Position, depth: i32) {
             let child = pos.make_move(mv);
             test_zobrist(&child, depth - 1);
         }
+
+        if pos.checked().is_none() {
+            test_zobrist(&pos.make_null_move(), depth-1);
+        }
     }
 }
 
@@ -1367,6 +1371,10 @@ fn test_eval(pos: &Position, depth: i32) {
         for mv in moves {
             let child = pos.make_move(mv);
             test_eval(&child, depth - 1);
+        }
+
+        if pos.checked().is_none() {
+            test_eval(&pos.make_null_move(), depth - 1);
         }
     }
 }

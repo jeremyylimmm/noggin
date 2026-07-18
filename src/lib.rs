@@ -490,6 +490,21 @@ impl Position {
         ))
     }
 
+    pub fn make_null_move(&self) -> Position {
+        let mut result = self.clone();
+
+        if let Some(existing_ep) = result.ep.take() {
+            result.hash ^= zobrist::EP_SQ[existing_ep.id()];
+        }
+
+        result.stm = result.stm.opp();
+        result.hash ^= zobrist::BLACK_TO_MOVE;
+
+        result.update_threats_checkers_ep_and_pins();
+
+        result
+    }
+
     fn has_king_castle_rights(&self, side: Side) -> bool {
         self.castle_rights & side.king_castle_rights_flag() != 0
     }
@@ -634,6 +649,16 @@ impl Position {
         }
 
         hash
+    }
+
+    fn non_king_pawn_material(&self, side: Side) -> bool {
+        for piece in [Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen] {
+            if self.bbs.get(piece, side) != 0 {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
