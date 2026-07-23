@@ -207,6 +207,10 @@ impl Worker {
             let score = -self.qsearch(-beta, -alpha, ply + 1);
             self.pos_stack.pop();
 
+            //if self.stopped {
+            //    return 0;
+            //}
+
             if score > best_score {
                 best_score = score;
             }
@@ -299,6 +303,26 @@ impl Worker {
 
         if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
             return static_eval;
+        }
+        
+        let can_nmp = !in_check && pos.non_king_pawn_material(pos.stm);
+
+        if can_nmp {
+            let r = 2;
+
+            let child = pos.make_null_move();
+
+            self.pos_stack.push(child);
+            let nmp_score = -self.search(-beta, -(beta-1), ply + 1, depth - r - 1);
+            self.pos_stack.pop();
+
+            if self.stopped {
+                return 0;
+            }
+
+            if nmp_score >= beta {
+                return nmp_score;
+            }
         }
 
         let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
