@@ -4,8 +4,9 @@ use crate::*;
 
 const MAX_PLY: usize = 128;
 
-const MOVE_SCORE_HASH_MOVE: i32 = 30_000_000;
-const MOVE_SCORE_CAPTURE_BASE: i32 = 20_000_000;
+const MOVE_SCORE_HASH_MOVE: i32 = 40_000_000;
+const MOVE_SCORE_CAPTURE_BASE: i32 = 30_000_000;
+const MOVE_SCORE_KILLER_BASE: i32 = 20_000_000;
 const MOVE_SCORE_NON_CAPTURE_BASE: i32 = 10_000_000;
 
 const MAX_HISTORY: i32 = 30_000;
@@ -108,6 +109,7 @@ pub struct Worker {
 
     tt: Vec<TTEntry>,
     butterfly_hist: Box<[[[i16; 64]; 64]; 2]>,
+    killers: Box<[[Move; 2]; MAX_PLY]>,
 
     nodes: usize,
     stopped: bool,
@@ -126,6 +128,7 @@ impl Worker {
             pv: Box::new([[Move::NULL; _]; _]),
             tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
             butterfly_hist: Box::new([[[0; _]; _]; _]),
+            killers: Box::new([[Move::NULL; _]; _]),
             nodes: 0,
             stopped: false,
             start_time: std::time::Instant::now(),
@@ -143,6 +146,15 @@ impl Worker {
     pub fn update_butterfly_hist(&mut self, pos: &Position, mv: Move, bonus: i32) {
         let val = &mut self.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()];
         apply_gravity(val, bonus);
+    }
+
+    fn add_killer(&mut self, ply: usize, mv: Move) {
+        if ply < MAX_PLY {
+            if self.killers[ply][0] != mv && self.killers[ply][1] != mv {
+                self.killers[ply][1] = self.killers[ply][0];
+                self.killers[ply][0] = mv;
+            }
+        }
     }
 
     fn qsearch(&mut self, mut alpha: Score, beta: Score, ply: usize) -> Score {
@@ -184,7 +196,7 @@ impl Worker {
             Move::NULL
         };
 
-        let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
+        let mut picker = MovePicker::new(&pos, moves, hash_mv, self, ply);
 
         let mut best_score = if pos.checked().is_some() {
             -INF_SCORE
@@ -304,7 +316,7 @@ impl Worker {
         if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
             return static_eval;
         }
-        
+
         let can_nmp = !in_check && pos.non_king_pawn_material(pos.stm);
 
         if can_nmp {
@@ -313,7 +325,7 @@ impl Worker {
             let child = pos.make_null_move();
 
             self.pos_stack.push(child);
-            let nmp_score = -self.search(-beta, -(beta-1), ply + 1, depth - r - 1);
+            let nmp_score = -self.search(-beta, -(beta - 1), ply + 1, depth - r - 1);
             self.pos_stack.pop();
 
             if self.stopped {
@@ -325,7 +337,7 @@ impl Worker {
             }
         }
 
-        let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
+        let mut picker = MovePicker::new(&pos, moves, hash_mv, self, ply);
 
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
@@ -343,8 +355,7 @@ impl Worker {
             let lmr = if mv_index > 0 && depth >= 3 {
                 let lmr = 0.5 + (depth as f32).ln() * (mv_index as f32).ln() / 2.0;
                 lmr.round() as i32
-            }
-            else {
+            } else {
                 0
             };
 
@@ -402,6 +413,8 @@ impl Worker {
                     for q in quiets {
                         self.update_butterfly_hist(&pos, q, -bonus);
                     }
+
+                    self.add_killer(ply, mv);
                 }
 
                 self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
@@ -440,6 +453,7 @@ impl Worker {
     pub fn reset(&mut self) {
         self.tt.fill(TTEntry::NULL);
         self.butterfly_hist.fill([[0; _]; _]);
+        self.killers.fill([Move::NULL; _]);
     }
 
     pub fn elapsed(&self) -> f32 {
@@ -651,11 +665,11 @@ struct MovePicker {
 }
 
 impl MovePicker {
-    fn new(pos: &Position, moves: MoveList, hash_mv: Move, worker: &Worker) -> Self {
+    fn new(pos: &Position, moves: MoveList, hash_mv: Move, worker: &Worker, ply: usize) -> Self {
         let mut scores = [0; _];
 
         for i in 0..moves.len() {
-            scores[i] = Self::score_move(pos, moves[i], hash_mv, worker);
+            scores[i] = Self::score_move(pos, moves[i], hash_mv, worker, ply);
         }
 
         Self {
@@ -665,11 +679,13 @@ impl MovePicker {
         }
     }
 
-    fn score_move(pos: &Position, mv: Move, hash_mv: Move, worker: &Worker) -> i32 {
+    fn score_move(pos: &Position, mv: Move, hash_mv: Move, worker: &Worker, ply: usize) -> i32 {
         if mv == hash_mv {
             MOVE_SCORE_HASH_MOVE
         } else if let Some((_, p)) = pos.capture(mv) {
             MOVE_SCORE_CAPTURE_BASE + p.material_value() - p.id() as i32
+        } else if ply < MAX_PLY && (mv == worker.killers[ply][0] || mv == worker.killers[ply][1]) {
+            MOVE_SCORE_KILLER_BASE
         } else {
             MOVE_SCORE_NON_CAPTURE_BASE
                 + worker.butterfly_hist[pos.stm.id()][mv.from().id()][mv.to().id()] as i32
