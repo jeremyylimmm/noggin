@@ -179,7 +179,12 @@ impl Worker {
                 return cutoff_score;
             }
 
-            entry.mv
+            if pos.is_legal(entry.mv) {
+                entry.mv
+            }
+            else {
+                Move::NULL
+            }
         } else {
             Move::NULL
         };
@@ -207,9 +212,9 @@ impl Worker {
             let score = -self.qsearch(-beta, -alpha, ply + 1);
             self.pos_stack.pop();
 
-            //if self.stopped {
-            //    return 0;
-            //}
+            if self.stopped {
+                return 0;
+            }
 
             if score > best_score {
                 best_score = score;
@@ -325,6 +330,8 @@ impl Worker {
         let mut best_mv = Move::NULL;
         let mut quiets = MoveList::new();
 
+        let mut mv_count = 0;
+
         for stage in 0..nstages {
             let mut picker = if stage == 0 && hash_mv != Move::NULL {
                 let mut mvs = MoveList::new();
@@ -342,18 +349,16 @@ impl Worker {
                 }
 
                 if hash_mv != Move::NULL {
-                    for i in 0..moves.len() {
-                        if moves[i] == hash_mv {
-                            moves.swap_remove(i);
-                            break;
-                        }
-                    }
+                    moves.remove_mv(hash_mv);
                 }
 
                 MovePicker::new(&pos, moves, hash_mv, self)
             };
 
-            while let Some((mv_index, mv)) = picker.next() {
+            while let Some((_, mv)) = picker.next() {
+                let mv_index = mv_count;
+                mv_count += 1;
+
                 let child = pos.make_move(mv);
 
                 let capture = pos.capture(mv);

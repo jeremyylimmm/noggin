@@ -980,6 +980,17 @@ impl MoveList {
         self.moves.swap(index, self.len - 1);
         self.len -= 1;
     }
+
+    pub fn remove_mv(&mut self, mv: Move) {
+        for i in 0..self.len() {
+            if self[i] == mv {
+                self.swap_remove(i);
+                return;
+            }
+        }
+
+        assert!(false);
+    }
 }
 
 impl std::ops::Index<usize> for MoveList {
