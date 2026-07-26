@@ -1214,7 +1214,7 @@ fn test_zobrist(pos: &Position, depth: i32) {
         }
 
         if pos.checked().is_none() {
-            test_zobrist(&pos.make_null_move(), depth-1);
+            test_zobrist(&pos.make_null_move(), depth - 1);
         }
     }
 }
@@ -1535,15 +1535,24 @@ fn test_is_legal_inner(pos: &Position, depth: i32) {
         let mv = Move::new(from, to, None);
         if legal.contains(&mv) != pos.is_legal(mv) {
             println!("FEN: {}", pos.fen());
-            println!("mv: {} -> {} piece={}", from.0, to.0, pos.board[from].map(|p| p as i32).unwrap_or(-1));
-            println!("in_legal={} is_legal={}", legal.contains(&mv), pos.is_legal(mv));
+            println!(
+                "mv: {} -> {} piece={}",
+                from.0,
+                to.0,
+                pos.board[from].map(|p| p as i32).unwrap_or(-1)
+            );
+            println!(
+                "in_legal={} is_legal={}",
+                legal.contains(&mv),
+                pos.is_legal(mv)
+            );
         }
         assert_eq!(legal.contains(&mv), pos.is_legal(mv));
     }
 
     if depth > 0 {
         for mv in legal {
-            test_is_legal_inner(&pos.make_move(mv), depth-1);
+            test_is_legal_inner(&pos.make_move(mv), depth - 1);
         }
     }
 }

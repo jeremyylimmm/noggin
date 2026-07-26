@@ -271,6 +271,10 @@ impl Worker {
         let static_eval = relative_eval(&pos);
         let in_check = pos.checked().is_some();
 
+        if pos.halfmove_clock >= 100 {
+            return 0;
+        }
+
         let hash_mv = if let Some(entry) = self.tt_query(&pos) {
             if !is_pv
                 && entry.depth as i32 >= depth
@@ -279,24 +283,14 @@ impl Worker {
                 return cut_score;
             }
 
-            entry.mv
+            if pos.is_legal(entry.mv) {
+                entry.mv
+            } else {
+                Move::NULL
+            }
         } else {
             Move::NULL
         };
-
-        let moves = pos.gen_legal_moves();
-
-        if moves.len() == 0 {
-            if pos.checked().is_some() {
-                return -MATE_SCORE + (ply as Score);
-            } else {
-                return 0;
-            }
-        }
-
-        if pos.halfmove_clock >= 100 {
-            return 0;
-        }
 
         let can_rfp = !in_check && !is_pv && hash_mv != Move::NULL;
         let rfp_margin = 150 * depth;
@@ -304,7 +298,7 @@ impl Worker {
         if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
             return static_eval;
         }
-        
+
         let can_nmp = !in_check && pos.non_king_pawn_material(pos.stm);
 
         if can_nmp {
@@ -313,7 +307,7 @@ impl Worker {
             let child = pos.make_null_move();
 
             self.pos_stack.push(child);
-            let nmp_score = -self.search(-beta, -(beta-1), ply + 1, depth - r - 1);
+            let nmp_score = -self.search(-beta, -(beta - 1), ply + 1, depth - r - 1);
             self.pos_stack.pop();
 
             if self.stopped {
@@ -325,80 +319,108 @@ impl Worker {
             }
         }
 
-        let mut picker = MovePicker::new(&pos, moves, hash_mv, self);
+        let nstages = if hash_mv != Move::NULL { 2 } else { 1 };
 
         let mut best_score = -INF_SCORE;
         let mut best_mv = Move::NULL;
-
         let mut quiets = MoveList::new();
 
-        while let Some((mv_index, mv)) = picker.next() {
-            let child = pos.make_move(mv);
+        for stage in 0..nstages {
+            let mut picker = if stage == 0 && hash_mv != Move::NULL {
+                let mut mvs = MoveList::new();
+                mvs.push(hash_mv);
+                MovePicker::new(&pos, mvs, hash_mv, self)
+            } else {
+                let mut moves = pos.gen_legal_moves();
 
-            let capture = pos.capture(mv);
-            let quiet = capture.is_none();
-
-            self.pos_stack.push(child);
-
-            let mut score = 0;
-
-            if !is_pv || mv_index > 0 {
-                score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1);
-            }
-
-            if is_pv && (mv_index == 0 || score > alpha) {
-                score = -self.search(-beta, -alpha, ply + 1, depth - 1);
-            }
-
-            self.pos_stack.pop();
-
-            if self.stopped {
-                return 0;
-            }
-
-            if score > best_score {
-                best_score = score;
-            }
-
-            if score > alpha {
-                if is_pv && ply < self.pv.len() {
-                    self.pv[ply][0] = mv;
-
-                    if (ply + 1) < self.pv.len() {
-                        for i in 0..(self.pv[ply + 1].len() - 1) {
-                            let x = self.pv[ply + 1][i];
-                            self.pv[ply][i + 1] = x;
-
-                            if x == Move::NULL {
-                                break;
-                            }
-                        }
+                if moves.len() == 0 {
+                    if pos.checked().is_some() {
+                        return -MATE_SCORE + (ply as Score);
                     } else {
-                        self.pv[ply][1] = Move::NULL;
+                        return 0;
                     }
                 }
 
-                best_mv = mv;
-                alpha = score;
-            }
+                if hash_mv != Move::NULL {
+                    for i in 0..moves.len() {
+                        if moves[i] == hash_mv {
+                            moves.swap_remove(i);
+                            break;
+                        }
+                    }
+                }
 
-            if alpha >= beta {
+                MovePicker::new(&pos, moves, hash_mv, self)
+            };
+
+            while let Some((mv_index, mv)) = picker.next() {
+                let child = pos.make_move(mv);
+
+                let capture = pos.capture(mv);
+                let quiet = capture.is_none();
+
+                self.pos_stack.push(child);
+
+                let mut score = 0;
+
+                if !is_pv || mv_index > 0 {
+                    score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1);
+                }
+
+                if is_pv && (mv_index == 0 || score > alpha) {
+                    score = -self.search(-beta, -alpha, ply + 1, depth - 1);
+                }
+
+                self.pos_stack.pop();
+
+                if self.stopped {
+                    return 0;
+                }
+
+                if score > best_score {
+                    best_score = score;
+                }
+
+                if score > alpha {
+                    if is_pv && ply < self.pv.len() {
+                        self.pv[ply][0] = mv;
+
+                        if (ply + 1) < self.pv.len() {
+                            for i in 0..(self.pv[ply + 1].len() - 1) {
+                                let x = self.pv[ply + 1][i];
+                                self.pv[ply][i + 1] = x;
+
+                                if x == Move::NULL {
+                                    break;
+                                }
+                            }
+                        } else {
+                            self.pv[ply][1] = Move::NULL;
+                        }
+                    }
+
+                    best_mv = mv;
+                    alpha = score;
+                }
+
+                if alpha >= beta {
+                    if quiet {
+                        let bonus = 300 * depth - 250;
+                        self.update_butterfly_hist(&pos, mv, bonus);
+
+                        for q in quiets {
+                            self.update_butterfly_hist(&pos, q, -bonus);
+                        }
+                    }
+
+                    self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
+
+                    return best_score;
+                }
+
                 if quiet {
-                    let bonus = 300 * depth - 250;
-                    self.update_butterfly_hist(&pos, mv, bonus);
-
-                    for q in quiets {
-                        self.update_butterfly_hist(&pos, q, -bonus);
-                    }
+                    quiets.push(mv);
                 }
-
-                self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
-
-                return best_score;
-            }
-
-            if quiet {
-                quiets.push(mv);
             }
         }
 

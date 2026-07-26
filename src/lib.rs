@@ -975,6 +975,11 @@ impl MoveList {
     pub fn swap(&mut self, a: usize, b: usize) {
         self.moves.swap(a, b);
     }
+
+    pub fn swap_remove(&mut self, index: usize) {
+        self.moves.swap(index, self.len - 1);
+        self.len -= 1;
+    }
 }
 
 impl std::ops::Index<usize> for MoveList {

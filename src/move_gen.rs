@@ -284,7 +284,7 @@ pub fn is_legal(pos: &Position, mv: Move) -> bool {
     match pos.checked() {
         Check::None => is_legal_standard(pos, mv, None),
         Check::Single(sq) => is_legal_standard(pos, mv, Some(sq)),
-        Check::Double => is_legal_evasions(pos, mv)
+        Check::Double => is_legal_evasions(pos, mv),
     }
 }
 
@@ -297,18 +297,15 @@ fn is_legal_evasions(pos: &Position, mv: Move) -> bool {
         Some(Piece::King) => {
             mv.to().bb() & king_moves(mv.from(), pos.side_occ(pos.stm())) & !pos.threats != 0
         }
-        
-        _ => {
-            false
-        }
+
+        _ => false,
     }
 }
 
 fn is_legal_standard(pos: &Position, mv: Move, checker: Option<Sq>) -> bool {
     let piece = if let Some(p) = pos.board[mv.from()] {
         p
-    }
-    else {
+    } else {
         return false;
     };
 
@@ -334,16 +331,11 @@ fn is_legal_standard(pos: &Position, mv: Move, checker: Option<Sq>) -> bool {
 
     match piece {
         Piece::Pawn => {
-            let ep_mask = if let Some(ep) = pos.ep {
-                ep.bb()
-            }
-            else {
-                0
-            };
+            let ep_mask = if let Some(ep) = pos.ep { ep.bb() } else { 0 };
 
             let occ = pos.occ();
             let pushes = pawn_pushes(bb, occ, pos.stm()) | pawn_double_pushes(bb, occ, pos.stm());
-            let captures =  pawn_attacks(bb, pos.stm()) & (pos.side_occ(pos.stm().opp()) | ep_mask);
+            let captures = pawn_attacks(bb, pos.stm()) & (pos.side_occ(pos.stm().opp()) | ep_mask);
 
             let pseudo = (pushes | captures) & legal_mask;
 
@@ -353,7 +345,7 @@ fn is_legal_standard(pos: &Position, mv: Move, checker: Option<Sq>) -> bool {
 
             // see if the pawn move reveals an attack
 
-            let capture = pos.capture(mv).map(|x|x.0.bb()).unwrap_or(0);
+            let capture = pos.capture(mv).map(|x| x.0.bb()).unwrap_or(0);
             let new_occ = pos.occ() ^ capture ^ mv.from().bb() ^ mv.to().bb();
 
             let bishop_attacks = bishop_attacks(king_sq, new_occ);
@@ -383,19 +375,19 @@ fn is_legal_standard(pos: &Position, mv: Move, checker: Option<Sq>) -> bool {
         Piece::Bishop => {
             let moves = bishop_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
             let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
-            mv.to().bb() & legal != 0 
+            mv.to().bb() & legal != 0
         }
 
         Piece::Rook => {
             let moves = rook_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
             let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
-            mv.to().bb() & legal != 0 
+            mv.to().bb() & legal != 0
         }
 
         Piece::Queen => {
             let moves = queen_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
             let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
-            mv.to().bb() & legal != 0 
+            mv.to().bb() & legal != 0
         }
 
         Piece::King => {
