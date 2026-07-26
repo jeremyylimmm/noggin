@@ -279,3 +279,148 @@ pub fn gen_legal_qsearch(pos: &Position) -> MoveList {
         Check::Double => gen_evasions(pos),
     }
 }
+
+pub fn is_legal(pos: &Position, mv: Move) -> bool {
+    match pos.checked() {
+        Check::None => is_legal_standard(pos, mv, None),
+        Check::Single(sq) => is_legal_standard(pos, mv, Some(sq)),
+        Check::Double => is_legal_evasions(pos, mv)
+    }
+}
+
+fn is_legal_evasions(pos: &Position, mv: Move) -> bool {
+    if mv.from().bb() & pos.side_occ(pos.stm()) == 0 {
+        return false;
+    }
+
+    match pos.board[mv.from()] {
+        Some(Piece::King) => {
+            mv.to().bb() & king_moves(mv.from(), pos.side_occ(pos.stm())) & !pos.threats != 0
+        }
+        
+        _ => {
+            false
+        }
+    }
+}
+
+fn is_legal_standard(pos: &Position, mv: Move, checker: Option<Sq>) -> bool {
+    let piece = if let Some(p) = pos.board[mv.from()] {
+        p
+    }
+    else {
+        return false;
+    };
+
+    let bb = mv.from().bb();
+
+    if bb & pos.side_occ(pos.stm()) == 0 {
+        return false;
+    }
+
+    // A promotion flag is valid iff a pawn is moving onto the promotion rank.
+    let on_promo_rank = mv.to().bb() & MASK_RANK[pos.stm().promotion_rank()] != 0;
+    if (matches!(piece, Piece::Pawn) && on_promo_rank) != mv.promotion().is_some() {
+        return false;
+    }
+
+    let king_sq = pos.king_sq(pos.stm());
+
+    let legal_mask = if let Some(sq) = checker {
+        sq.bb() | line_between_diagonal(king_sq, sq).0 | line_between_straight(king_sq, sq).0
+    } else {
+        u64::MAX
+    };
+
+    match piece {
+        Piece::Pawn => {
+            let ep_mask = if let Some(ep) = pos.ep {
+                ep.bb()
+            }
+            else {
+                0
+            };
+
+            let occ = pos.occ();
+            let pushes = pawn_pushes(bb, occ, pos.stm()) | pawn_double_pushes(bb, occ, pos.stm());
+            let captures =  pawn_attacks(bb, pos.stm()) & (pos.side_occ(pos.stm().opp()) | ep_mask);
+
+            let pseudo = (pushes | captures) & legal_mask;
+
+            if mv.to().bb() & pseudo == 0 {
+                return false;
+            }
+
+            // see if the pawn move reveals an attack
+
+            let capture = pos.capture(mv).map(|x|x.0.bb()).unwrap_or(0);
+            let new_occ = pos.occ() ^ capture ^ mv.from().bb() ^ mv.to().bb();
+
+            let bishop_attacks = bishop_attacks(king_sq, new_occ);
+            let rook_attacks = rook_attacks(king_sq, new_occ);
+
+            if bishop_attacks & pos.bbs.get(Piece::Bishop, pos.stm().opp()) != 0 {
+                return false;
+            }
+
+            if rook_attacks & pos.bbs.get(Piece::Rook, pos.stm().opp()) != 0 {
+                return false;
+            }
+
+            if (rook_attacks | bishop_attacks) & pos.bbs.get(Piece::Queen, pos.stm().opp()) != 0 {
+                return false;
+            }
+
+            return true;
+        }
+
+        Piece::Knight => {
+            let moves = knight_moves(mv.from(), pos.side_occ(pos.stm()));
+            let legal = moves & legal_mask;
+            (bb & pos.pins) == 0 && (mv.to().bb() & legal) != 0
+        }
+
+        Piece::Bishop => {
+            let moves = bishop_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
+            let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
+            mv.to().bb() & legal != 0 
+        }
+
+        Piece::Rook => {
+            let moves = rook_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
+            let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
+            mv.to().bb() & legal != 0 
+        }
+
+        Piece::Queen => {
+            let moves = queen_moves(mv.from(), pos.occ(), pos.side_occ(pos.stm()));
+            let legal = moves & pos.pin_ray(mv.from()) & legal_mask;
+            mv.to().bb() & legal != 0 
+        }
+
+        Piece::King => {
+            let occ = pos.occ();
+            let mut legal = 0;
+
+            if checker.is_none() {
+                if pos.has_king_castle_rights(pos.stm)
+                    && occ & (MASK_KING_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
+                    && (MASK_KING_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()]) & pos.threats == 0
+                {
+                    legal |= Sq::from_coords(king_sq.rank(), 6).bb();
+                }
+
+                if pos.has_queen_castle_rights(pos.stm)
+                    && occ & (MASK_QUEEN_CASTLE_EMPTY & MASK_RANK[pos.stm.home_rank()]) == 0
+                    && (MASK_QUEEN_CASTLE_PATH & MASK_RANK[pos.stm.home_rank()]) & pos.threats == 0
+                {
+                    legal |= Sq::from_coords(king_sq.rank(), 2).bb();
+                }
+            }
+
+            legal |= king_moves(king_sq, pos.side_occ(pos.stm())) & !pos.threats;
+
+            mv.to().bb() & legal != 0
+        }
+    }
+}

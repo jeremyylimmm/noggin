@@ -108,7 +108,7 @@ pub struct Sq(u8);
 
 pub type Board = [Option<Piece>; 64];
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Move(u16);
 
 impl Move {
@@ -303,16 +303,6 @@ impl Position {
                 }
             }
         }
-    }
-
-    pub fn is_legal(&self, mv: Move) -> bool {
-        for leg in self.gen_legal_moves() {
-            if leg == mv {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     pub fn pin_ray(&self, sq: Sq) -> u64 {
@@ -659,6 +649,10 @@ impl Position {
         }
 
         false
+    }
+
+    pub fn is_legal(&self, mv: Move) -> bool {
+        move_gen::is_legal(self, mv)
     }
 }
 
@@ -1072,5 +1066,36 @@ impl Check {
 
     pub fn is_double(&self) -> bool {
         matches!(self, Self::Double)
+    }
+}
+
+pub struct PCG32 {
+    state: u64,
+    inc: u64,
+}
+
+impl PCG32 {
+    pub fn new(state: u64, inc: u64) -> Self {
+        let mut s = Self { state, inc };
+        let _ = s.next64();
+        s
+    }
+
+    pub fn next32(&mut self) -> u32 {
+        let oldstate = self.state;
+        // Advance internal state
+        self.state = oldstate.overflowing_mul(6364136223846793005u64).0 + (self.inc | 1);
+        // Calculate output function (XSH RR), uses old state for max ILP
+        let xorshifted: u32 = (((oldstate >> 18) ^ oldstate) >> 27) as u32;
+        let rot: i32 = (oldstate >> 59) as i32;
+        return (xorshifted >> rot) | (xorshifted << ((-rot) & 31));
+    }
+
+    pub fn next64(&mut self) -> u64 {
+        return (self.next32() as u64) | (self.next32() as u64) << 32;
+    }
+
+    pub fn next32_f(&mut self) -> f32 {
+        (self.next32() as f64 / u32::MAX as f64) as _
     }
 }

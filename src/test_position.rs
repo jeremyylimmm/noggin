@@ -1,4 +1,5 @@
 use crate::*;
+use std::collections::HashSet;
 
 const FENS: [(&str, &[(i32, usize)]); 128] = [
     (
@@ -1522,3 +1523,33 @@ define_eval_test!(test_eval_124, 124);
 define_eval_test!(test_eval_125, 125);
 define_eval_test!(test_eval_126, 126);
 define_eval_test!(test_eval_127, 127);
+
+fn test_is_legal_inner(pos: &Position, depth: i32) {
+    let legal: HashSet<Move> = pos.gen_legal_moves().into_iter().collect();
+
+    let mut rng = PCG32::new(323 * depth as u64, 5);
+
+    for _ in 0..100 {
+        let from = Sq((rng.next32_f() * 64.0) as _);
+        let to = Sq((rng.next32_f() * 64.0) as _);
+        let mv = Move::new(from, to, None);
+        if legal.contains(&mv) != pos.is_legal(mv) {
+            println!("FEN: {}", pos.fen());
+            println!("mv: {} -> {} piece={}", from.0, to.0, pos.board[from].map(|p| p as i32).unwrap_or(-1));
+            println!("in_legal={} is_legal={}", legal.contains(&mv), pos.is_legal(mv));
+        }
+        assert_eq!(legal.contains(&mv), pos.is_legal(mv));
+    }
+
+    if depth > 0 {
+        for mv in legal {
+            test_is_legal_inner(&pos.make_move(mv), depth-1);
+        }
+    }
+}
+
+#[test]
+fn test_is_legal() {
+    let pos = Position::from_fen(KIWIPETE_FEN).unwrap();
+    test_is_legal_inner(&pos, 5);
+}
