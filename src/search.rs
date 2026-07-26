@@ -340,10 +340,22 @@ impl Worker {
 
             self.pos_stack.push(child);
 
+            let lmr = if mv_index > 0 && depth < 3 {
+                let lmr = 0.5 + (depth as f32).ln() * (mv_index as f32).ln() / 2.0;
+                lmr.round() as i32
+            }
+            else {
+                0
+            };
+
             let mut score = 0;
 
             if !is_pv || mv_index > 0 {
-                score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1);
+                score = -self.search(-(alpha + 1), -alpha, ply + 1, depth - 1 - lmr);
+
+                if score > alpha {
+                    score = -self.search(-beta, -alpha, ply + 1, depth - 1 - lmr);
+                }
             }
 
             if is_pv && (mv_index == 0 || score > alpha) {
