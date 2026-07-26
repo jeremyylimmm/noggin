@@ -340,7 +340,7 @@ impl Worker {
 
             self.pos_stack.push(child);
 
-            let lmr = if mv_index > 0 && depth < 3 {
+            let lmr = if mv_index > 0 && depth >= 3 {
                 let lmr = 0.5 + (depth as f32).ln() * (mv_index as f32).ln() / 2.0;
                 lmr.round() as i32
             }
