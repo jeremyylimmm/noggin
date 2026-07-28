@@ -1213,7 +1213,7 @@ fn test_zobrist(pos: &Position, depth: i32) {
         }
 
         if pos.checked().is_none() {
-            test_zobrist(&pos.make_null_move(), depth-1);
+            test_zobrist(&pos.make_null_move(), depth - 1);
         }
     }
 }

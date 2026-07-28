@@ -108,7 +108,7 @@ pub struct Sq(u8);
 
 pub type Board = [Option<Piece>; 64];
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Move(u16);
 
 impl Move {
