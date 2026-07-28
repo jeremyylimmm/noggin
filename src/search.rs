@@ -761,9 +761,9 @@ fn apply_gravity(val: &mut i16, bonus: i32) {
 fn pawn_key(pos: &Position) -> u64 {
     let mut hash = zobrist::BASE;
 
-    for side in [Side::White, Side::Black] {
+    for (i, &side) in [pos.stm(), pos.stm().opp()].iter().enumerate() {
         for sq in iter_bb(pos.bbs.get(Piece::Pawn, side)) {
-            hash ^= zobrist::PIECE_SQ[side.id()][Piece::Pawn.id()][sq.id()];
+            hash ^= zobrist::PIECE_SQ[i][Piece::Pawn.id()][sq.id()];
         }
     }
 
