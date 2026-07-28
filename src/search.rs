@@ -108,7 +108,7 @@ pub struct Worker {
 
     tt: Vec<TTEntry>,
     butterfly_hist: Box<[[[i16; 64]; 64]; 2]>,
-    corr_hist: Box<[[i16; 1024 * 1024]; 2]>,
+    corr_hist: Box<[[i16; 1024]; 2]>,
 
     nodes: usize,
     stopped: bool,
