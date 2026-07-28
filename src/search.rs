@@ -664,7 +664,7 @@ impl Worker {
     fn relative_eval_corrected(&self, pos: &Position) -> Score {
         let index = pawn_key(pos) as usize % self.corr_hist[0].len();
         let cv = self.corr_hist[pos.stm().id()][index] as i32;
-        let v = raw_relative_eval(pos) + 66 * cv / 2048;
+        let v = raw_relative_eval(pos) +  cv / 1024;
         v.clamp(-MATE_SCORE + 1000, MATE_SCORE - 1000)
     }
 }
