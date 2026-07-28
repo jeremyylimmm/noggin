@@ -426,11 +426,11 @@ impl Worker {
         }
 
         let mv_is_pv = best_score > alpha0 && best_score < beta;
-        let best_mv = if mv_is_pv {best_mv} else {Move::NULL};
+        let real_mv = if mv_is_pv {best_mv} else {Move::NULL};
 
         let raw_static_eval = raw_relative_eval(&pos);
 
-        if (!in_check && (best_mv == Move::NULL || pos.capture(best_mv).is_none()))
+        if (!in_check && (real_mv == Move::NULL || pos.capture(real_mv).is_none()))
             && !(best_score >= beta && best_score <= raw_static_eval)
             && !(best_score <= alpha && best_score >= raw_static_eval)
         {
@@ -452,7 +452,11 @@ impl Worker {
         self.tt_write(
             &pos,
             depth,
-            best_mv,
+            if best_score <= alpha0 {
+                Move::NULL
+            } else {
+                best_mv
+            },
             ply as _,
             tt_kind,
             best_score,
