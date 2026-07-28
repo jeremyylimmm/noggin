@@ -439,7 +439,7 @@ impl Worker {
             apply_gravity(&mut self.corr_hist[pos.stm().id()][index], bonus);
         }
 
-        let tt_kind = if is_pv {
+        let tt_kind = if mv_is_pv {
             TTKind::Exact
         }
         else if best_score <= alpha0 {
