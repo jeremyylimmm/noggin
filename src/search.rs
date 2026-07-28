@@ -428,13 +428,11 @@ impl Worker {
         let mv_is_pv = best_score > alpha0 && best_score < beta;
         let real_mv = if mv_is_pv {best_mv} else {Move::NULL};
 
-        let raw_static_eval = raw_relative_eval(&pos);
-
         if (!in_check && (real_mv == Move::NULL || pos.capture(real_mv).is_none()))
-            && !(best_score >= beta && best_score <= raw_static_eval)
-            && !(best_score <= alpha && best_score >= raw_static_eval)
+            && !(best_score >= beta && best_score <= static_eval)
+            && !(best_score <= alpha && best_score >= static_eval)
         {
-            let bonus = ((best_score - raw_static_eval) * depth / 8).clamp(-MAX_HISTORY/4, MAX_HISTORY/4);
+            let bonus = ((best_score - static_eval) * depth / 8).clamp(-MAX_HISTORY/4, MAX_HISTORY/4);
             let index = pawn_key(&pos) as usize % self.corr_hist[0].len();
             apply_gravity(&mut self.corr_hist[pos.stm().id()][index], bonus);
         }
