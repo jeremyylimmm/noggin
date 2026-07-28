@@ -246,52 +246,32 @@ impl Worker {
         best_score
     }
 
-    fn search(&mut self, alpha: Score, beta: Score, ply: usize, depth: i32) -> Score {
-        let (score, best_mv) = self.search_inner(alpha, beta, ply, depth);
-
-        let pos = self.pos_stack.last().unwrap().clone();
-        let in_check = pos.checked().is_some();
-
-        let static_eval = raw_relative_eval(&pos);
-
-        if (!in_check && (best_mv == Move::NULL || pos.capture(best_mv).is_none()))
-            && !(score >= beta && score <= static_eval)
-            && !(score <= alpha && score >= static_eval)
-        {
-            let bonus = ((score - static_eval) * depth / 8).clamp(-MAX_HISTORY/4, MAX_HISTORY/4);
-            let index = pawn_key(&pos) as usize % self.corr_hist[0].len();
-            apply_gravity(&mut self.corr_hist[pos.stm().id()][index], bonus);
-        }
-
-        score
-    }
-
-    fn search_inner(
+    fn search(
         &mut self,
         mut alpha: Score,
         beta: Score,
         ply: usize,
         depth: i32,
-    ) -> (Score, Move) {
+    ) -> Score {
         if ply < self.pv.len() {
             self.pv[ply][0] = Move::NULL;
         }
 
         if depth <= 0 {
-            return (self.qsearch(alpha, beta, ply), Move::NULL);
+            return self.qsearch(alpha, beta, ply);
         }
 
         self.nodes += 1;
 
         if self.check_stop() {
-            return (0, Move::NULL);
+            return 0;
         }
 
         let alpha0 = alpha;
         let is_pv = beta > alpha + 1;
 
         if self.is_repetition(ply as _) {
-            return (0, Move::NULL);
+            return 0;
         }
 
         let pos = self.pos_stack.last().unwrap().clone();
@@ -304,7 +284,7 @@ impl Worker {
                 && entry.depth as i32 >= depth
                 && let Some(cut_score) = entry.cutoff(ply as _, alpha, beta)
             {
-                return (cut_score, Move::NULL);
+                return cut_score;
             }
 
             entry.mv
@@ -321,18 +301,18 @@ impl Worker {
                 0
             };
 
-            return (sc, Move::NULL);
+            return sc;
         }
 
         if pos.halfmove_clock >= 100 {
-            return (0, Move::NULL);
+            return 0;
         }
 
         let can_rfp = !in_check && !is_pv && hash_mv != Move::NULL;
         let rfp_margin = 150 * depth;
 
         if can_rfp && !beta.is_mate() && static_eval >= beta + rfp_margin {
-            return (static_eval, Move::NULL);
+            return static_eval;
         }
 
         let can_nmp = !in_check && pos.non_king_pawn_material(pos.stm);
@@ -347,11 +327,11 @@ impl Worker {
             self.pos_stack.pop();
 
             if self.stopped {
-                return (0, Move::NULL);
+                return 0;
             }
 
             if nmp_score >= beta {
-                return (nmp_score, Move::NULL);
+                return nmp_score;
             }
         }
 
@@ -394,7 +374,7 @@ impl Worker {
             self.pos_stack.pop();
 
             if self.stopped {
-                return (0, Move::NULL);
+                return 0;
             }
 
             if score > best_score {
@@ -424,18 +404,9 @@ impl Worker {
             }
 
             if alpha >= beta {
-                if quiet {
-                    let bonus = 300 * depth - 250;
-                    self.update_butterfly_hist(&pos, mv, bonus);
+                break;
 
-                    for q in quiets {
-                        self.update_butterfly_hist(&pos, q, -bonus);
-                    }
-                }
 
-                self.tt_write(&pos, depth, mv, ply as _, TTKind::Lower, best_score);
-
-                return (best_score, best_mv);
             }
 
             if quiet {
@@ -443,22 +414,51 @@ impl Worker {
             }
         }
 
-        let mv_is_pv = best_score > alpha0;
+        if alpha >= beta {
+            if pos.capture(best_mv).is_none() {
+                let bonus = 300 * depth - 250;
+                self.update_butterfly_hist(&pos, best_mv, bonus);
+
+                for q in quiets {
+                    self.update_butterfly_hist(&pos, q, -bonus);
+                }
+            }
+        }
+
+        let mv_is_pv = best_score > alpha0 && best_score < beta;
+        let best_mv = if mv_is_pv {best_mv} else {Move::NULL};
+
+        let raw_static_eval = raw_relative_eval(&pos);
+
+        if (!in_check && (best_mv == Move::NULL || pos.capture(best_mv).is_none()))
+            && !(best_score >= beta && best_score <= raw_static_eval)
+            && !(best_score <= alpha && best_score >= raw_static_eval)
+        {
+            let bonus = ((best_score - raw_static_eval) * depth / 8).clamp(-MAX_HISTORY/4, MAX_HISTORY/4);
+            let index = pawn_key(&pos) as usize % self.corr_hist[0].len();
+            apply_gravity(&mut self.corr_hist[pos.stm().id()][index], bonus);
+        }
+
+        let tt_kind = if is_pv {
+            TTKind::Exact
+        }
+        else if best_score <= alpha0 {
+            TTKind::Upper
+        }
+        else {
+            TTKind::Lower
+        };
 
         self.tt_write(
             &pos,
             depth,
-            if mv_is_pv { best_mv } else { Move::NULL },
+            best_mv,
             ply as _,
-            if mv_is_pv {
-                TTKind::Exact
-            } else {
-                TTKind::Upper
-            },
+            tt_kind,
             best_score,
         );
 
-        (best_score, best_mv)
+        best_score
     }
 
     pub fn resize_tt(&mut self, size_mb: usize) {
