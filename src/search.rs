@@ -127,7 +127,7 @@ impl Worker {
             pv: Box::new([[Move::NULL; _]; _]),
             tt: vec![TTEntry::NULL; tt_len(tt_size_mb)],
             butterfly_hist: Box::new([[[0; _]; _]; _]),
-            corr_hist: Box::new([[9; _]; _]),
+            corr_hist: Box::new([[0; _]; _]),
             nodes: 0,
             stopped: false,
             start_time: std::time::Instant::now(),
